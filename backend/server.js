@@ -2,10 +2,13 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
-
+const transactionRoutes = require("./routes/transactionRoutes");
 dotenv.config();
 
 const authRoutes = require("./routes/authRoutes");
+const palmRoutes = require("./routes/palmRoutes");
+const walletRoutes = require("./routes/walletRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
 
 const app = express();
 
@@ -20,6 +23,11 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api/auth", authRoutes);
+app.use("/api/palm", palmRoutes);
+app.use("/api/wallet", walletRoutes);
+app.use("/api/payment",paymentRoutes);
+app.use("/api/transactions", transactionRoutes);
+
 
 
 // Health check
