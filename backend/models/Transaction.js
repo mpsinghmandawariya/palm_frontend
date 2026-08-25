@@ -6,18 +6,19 @@ const transactionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
     amount: {
       type: Number,
       required: true,
-      min: 1,
+      min: 0.01,
     },
 
     type: {
       type: String,
       enum: ["PALM_PAYMENT"],
-      default: "PALM_PAYMENT",
+      required: true,
     },
 
     status: {
@@ -30,6 +31,7 @@ const transactionSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      index: true,
     },
   },
   {
@@ -37,7 +39,8 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model(
-  "Transaction",
-  transactionSchema
-);
+module.exports =
+  mongoose.model(
+    "Transaction",
+    transactionSchema
+  );

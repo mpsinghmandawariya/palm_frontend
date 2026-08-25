@@ -8,34 +8,45 @@ export default function Dashboard() {
   const [wallet, setWallet] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+const [recentTransactions, setRecentTransactions] =
+  useState([]);
+ const loadWallet = async () => {
+  try {
+    setLoading(true);
+    setError("");
 
-  const loadWallet = async () => {
-    try {
-      setLoading(true);
-      setError("");
+    const walletResponse =
+      await API.get("/wallet");
 
-      const response = await API.get("/wallet");
+    setWallet(walletResponse.data);
 
-      setWallet(response.data);
-    } catch (err) {
-      console.error(err);
+    const transactionResponse =
+      await API.get("/transactions");
 
-      if (err.response?.status === 401) {
-        localStorage.removeItem("palmPayToken");
-        localStorage.removeItem("palmPayUser");
+    setRecentTransactions(
+      transactionResponse.data.transactions
+        .slice(0, 3)
+    );
 
-        navigate("/");
-        return;
-      }
+  } catch (err) {
+    console.error(err);
 
-      setError(
-        err.response?.data?.message ||
-          "Unable to load wallet"
-      );
-    } finally {
-      setLoading(false);
+    if (err.response?.status === 401) {
+      localStorage.removeItem("palmPayToken");
+      localStorage.removeItem("palmPayUser");
+
+      navigate("/");
+      return;
     }
-  };
+
+    setError(
+      err.response?.data?.message ||
+      "Unable to load wallet"
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     loadWallet();
@@ -216,106 +227,55 @@ export default function Dashboard() {
 
         <section className="dashboard-section">
 
-          <h2>Quick Actions</h2>
+  <h2>Quick Actions</h2>
 
-          <div className="quick-actions">
+  <div className="quick-actions">
 
-            <button
-              onClick={() =>
-                navigate("/send-money")
-              }
-              className="action-card"
-            >
+    <button
+      className="action-card action-card-primary"
+      onClick={() => navigate("/pay-with-palm")}
+    >
+      <div className="action-icon">
+        🖐
+      </div>
 
-              <div className="action-icon">
-                💸
-              </div>
+      <div>
+        <strong>Pay With Palm</strong>
+        <span>Secure biometric payment</span>
+      </div>
+    </button>
 
-              <div>
-                <strong>
-                  Send Money
-                </strong>
+    <button
+      className="action-card"
+      onClick={() => navigate("/transactions")}
+    >
+      <div className="action-icon">
+        📜
+      </div>
 
-                <span>
-                  Pay someone
-                </span>
-              </div>
+      <div>
+        <strong>Transactions</strong>
+        <span>View payment history</span>
+      </div>
+    </button>
 
-            </button>
+    <button
+      className="action-card"
+      onClick={() => navigate("/profile")}
+    >
+      <div className="action-icon">
+        👤
+      </div>
 
+      <div>
+        <strong>Profile</strong>
+        <span>Account information</span>
+      </div>
+    </button>
 
-           <button
-  onClick={() =>
-    navigate("/pay-with-palm")
-  }
-  className="action-card"
->
-  <div className="action-icon">
-    🖐
   </div>
 
-  <div>
-    <strong>
-      Pay With Palm
-    </strong>
-
-    <span>
-      Secure payment
-    </span>
-  </div>
-</button>
-
-
-            <button
-              onClick={() =>
-                navigate("/transactions")
-              }
-              className="action-card"
-            >
-
-              <div className="action-icon">
-                📜
-              </div>
-
-              <div>
-                <strong>
-                  Transactions
-                </strong>
-
-                <span>
-                  View history
-                </span>
-              </div>
-
-            </button>
-
-
-            <button
-              onClick={() =>
-                navigate("/profile")
-              }
-              className="action-card"
-            >
-
-              <div className="action-icon">
-                👤
-              </div>
-
-              <div>
-                <strong>
-                  Profile
-                </strong>
-
-                <span>
-                  Account details
-                </span>
-              </div>
-
-            </button>
-
-          </div>
-
-        </section>
+</section>
 
 
         {/* PALM STATUS */}
@@ -355,42 +315,87 @@ export default function Dashboard() {
 
         {/* RECENT TRANSACTIONS */}
 
-        <section className="dashboard-section">
+       <section className="dashboard-section">
 
-          <div className="section-heading">
+  <div className="section-heading">
 
-            <h2>
-              Recent Transactions
-            </h2>
+    <h2>
+      Recent Transactions
+    </h2>
 
-            <button
-              onClick={() =>
-                navigate("/transactions")
-              }
-            >
-              View All →
-            </button>
+    <button
+      onClick={() =>
+        navigate("/transactions")
+      }
+    >
+      View All →
+    </button>
 
-          </div>
+  </div>
 
+  {recentTransactions.length === 0 ? (
 
-          <div className="empty-transactions">
+    <div className="empty-transactions">
 
-            <div>
-              📜
+      <div>
+        📜
+      </div>
+
+      <h3>
+        No transactions yet
+      </h3>
+
+      <p>
+        Your recent payments will appear here.
+      </p>
+
+    </div>
+
+  ) : (
+
+    <div className="dashboard-transactions">
+
+      {recentTransactions.map(
+        (transaction) => (
+
+          <div
+            key={transaction._id}
+            className="dashboard-transaction"
+          >
+
+            <div className="action-icon">
+              🖐
             </div>
 
-            <h3>
-              No transactions yet
-            </h3>
+            <div>
+              <strong>
+                Palm Payment
+              </strong>
 
-            <p>
-              Your recent payments will appear here.
-            </p>
+              <span>
+                {new Date(
+                  transaction.createdAt
+                ).toLocaleDateString("en-IN")}
+              </span>
+            </div>
+
+            <strong className="transaction-negative">
+              - ₹
+              {Number(
+                transaction.amount
+              ).toLocaleString("en-IN")}
+            </strong>
 
           </div>
 
-        </section>
+        )
+      )}
+
+    </div>
+
+  )}
+
+</section>
 
       </main>
 

@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const transactionRoutes = require("./routes/transactionRoutes");
+const profileRoutes = require(
+  "./routes/profileRoutes"
+);
 dotenv.config();
 
 const authRoutes = require("./routes/authRoutes");
@@ -27,6 +30,7 @@ app.use("/api/palm", palmRoutes);
 app.use("/api/wallet", walletRoutes);
 app.use("/api/payment",paymentRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/profile",profileRoutes);
 
 
 

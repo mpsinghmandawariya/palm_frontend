@@ -7,6 +7,8 @@ import PalmRegister from "./pages/PalmRegister";
 import ReceiveMoney from "./pages/ReceiveMoney";
 import PayWithPalm from "./pages/PayWithPalm";
 import Transactions from "./pages/Transactions";
+import Profile from "./pages/Profile";
+
 
 export default function App() {
   return (
@@ -27,6 +29,15 @@ export default function App() {
   element={
     <ProtectedRoute>
       <ReceiveMoney />
+    </ProtectedRoute>
+  }
+/>
+
+<Route
+  path="/profile"
+  element={
+    <ProtectedRoute>
+      <Profile />
     </ProtectedRoute>
   }
 />

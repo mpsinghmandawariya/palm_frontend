@@ -10,19 +10,16 @@ const generateTransactionId = () => {
   );
 };
 
-
 const payWithPalm = async (req, res) => {
   try {
     const { amount, palmVerified } = req.body;
 
-    // -----------------------------
-    // Validate amount
-    // -----------------------------
+    const paymentAmount = Number(amount);
 
+    // Validate amount
     if (
-      amount === undefined ||
-      amount === null ||
-      Number(amount) <= 0
+      !Number.isFinite(paymentAmount) ||
+      paymentAmount <= 0
     ) {
       return res.status(400).json({
         success: false,
@@ -30,13 +27,19 @@ const payWithPalm = async (req, res) => {
       });
     }
 
-    const paymentAmount = Number(amount);
+    // Maximum 2 decimal places
+    if (
+      Math.round(paymentAmount * 100) !==
+      paymentAmount * 100
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Amount can have maximum 2 decimal places",
+      });
+    }
 
-
-    // -----------------------------
-    // Temporary ML verification
-    // -----------------------------
-
+    // Temporary palm verification
     if (palmVerified !== true) {
       return res.status(401).json({
         success: false,
@@ -44,11 +47,7 @@ const payWithPalm = async (req, res) => {
       });
     }
 
-
-    // -----------------------------
-    // Find user
-    // -----------------------------
-
+    // Find authenticated user
     const user = await User.findById(req.userId);
 
     if (!user) {
@@ -58,49 +57,36 @@ const payWithPalm = async (req, res) => {
       });
     }
 
-
-    // -----------------------------
     // Check balance
-    // -----------------------------
+    const currentBalance =
+      Number(user.walletBalance) || 0;
 
-    if (user.walletBalance < paymentAmount) {
+    if (currentBalance < paymentAmount) {
       return res.status(400).json({
         success: false,
         message: "Insufficient wallet balance",
-        balance: user.walletBalance,
+        balance: currentBalance,
       });
     }
 
-
-    // -----------------------------
-    // Deduct amount
-    // -----------------------------
-
-    user.walletBalance -= paymentAmount;
+    // Deduct balance
+    user.walletBalance =
+      currentBalance - paymentAmount;
 
     await user.save();
 
-
-    // -----------------------------
     // Create transaction
-    // -----------------------------
-
-    const transaction = await Transaction.create({
-      userId: user._id,
-      amount: paymentAmount,
-      type: "PALM_PAYMENT",
-      status: "COMPLETED",
-      transactionId: generateTransactionId(),
-    });
-
-
-    // -----------------------------
-    // Response
-    // -----------------------------
+    const transaction =
+      await Transaction.create({
+        userId: user._id,
+        amount: paymentAmount,
+        type: "PALM_PAYMENT",
+        status: "COMPLETED",
+        transactionId: generateTransactionId(),
+      });
 
     res.status(200).json({
       success: true,
-
       message: "Payment successful",
 
       payment: {
@@ -119,9 +105,8 @@ const payWithPalm = async (req, res) => {
     });
 
   } catch (error) {
-
     console.error(
-      "Palm payment error:",
+      "PALM PAYMENT ERROR:",
       error
     );
 
@@ -131,7 +116,6 @@ const payWithPalm = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   payWithPalm,
