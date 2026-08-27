@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+dataset/*
+!dataset/.gitkeep
+embeddings/database.pkl
+.keras/
