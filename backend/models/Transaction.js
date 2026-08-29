@@ -17,13 +17,29 @@ const transactionSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["PALM_PAYMENT"],
+      enum: ["PALM_PAYMENT", "TRANSFER", "WALLET_TOPUP", "BILL_PAYMENT"],
+      default: "PALM_PAYMENT",
       required: true,
+    },
+
+    recipientName: {
+      type: String,
+      default: "Merchant / Palm Payee",
+    },
+
+    recipientPhone: {
+      type: String,
+      default: "",
+    },
+
+    category: {
+      type: String,
+      default: "Payment",
     },
 
     status: {
       type: String,
-      enum: ["COMPLETED", "FAILED"],
+      enum: ["COMPLETED", "FAILED", "PENDING"],
       default: "COMPLETED",
     },
 
@@ -39,8 +55,7 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-module.exports =
-  mongoose.model(
-    "Transaction",
-    transactionSchema
-  );
+module.exports = mongoose.model(
+  "Transaction",
+  transactionSchema
+);

@@ -43,6 +43,65 @@ def extract_palm(image, hands):
 
     return cv2.resize(crop, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_AREA)
 
+def assess_quality(image):
+    """
+    Assesses image blurriness and lighting exposure.
+    Returns quality score between 0.0 and 1.0
+    """
+    if image is None or image.size == 0:
+        return 0.0
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Sharpness via Laplacian variance
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    sharpness_score = min(1.0, laplacian_var / 500.0)
+
+    # Brightness score (ideal mean brightness between 80 and 180)
+    mean_bright = gray.mean()
+    if 80 <= mean_bright <= 180:
+        brightness_score = 1.0
+    else:
+        brightness_score = max(0.2, 1.0 - abs(mean_bright - 130) / 130)
+
+    quality = 0.6 * sharpness_score + 0.4 * brightness_score
+    return round(float(np.clip(quality, 0.0, 1.0)), 3)
+
+def detect_liveness(image):
+    """
+    Presentation Attack Detection (PAD).
+    Evaluates high-frequency texture spectrum and color variance.
+    Returns liveness score between 0.0 and 1.0
+    """
+    if image is None or image.size == 0:
+        return 0.0
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+
+    # Frequency analysis via FFT to detect screen grid artifacts
+    dft = cv2.dft(np.float32(gray), flags=cv2.DFT_COMPLEX_OUTPUT)
+    dft_shift = np.fft.fftshift(dft)
+    magnitude_spectrum = 20 * np.log(cv2.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]) + 1e-6)
+    
+    # Calculate high-frequency energy ratio
+    center_h, center_w = h // 2, w // 2
+    r = 30
+    mask = np.ones((h, w), np.uint8)
+    cv2.circle(mask, (center_w, center_h), r, 0, -1)
+    
+    high_freq_energy = np.mean(magnitude_spectrum[mask == 1])
+    total_energy = np.mean(magnitude_spectrum)
+    
+    ratio = high_freq_energy / (total_energy + 1e-6)
+    liveness_score = min(1.0, max(0.4, ratio / 1.5))
+    
+    # Add random skin texture noise simulation factor
+    color_std = np.std(image)
+    if color_std < 15.0: # flat photo printout threshold
+        liveness_score *= 0.5
+
+    return round(float(np.clip(liveness_score, 0.0, 1.0)), 3)
+
 def cosine_similarity(a, b):
     a = np.asarray(a, dtype=np.float32)
     b = np.asarray(b, dtype=np.float32)
