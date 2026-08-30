@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -13,10 +13,15 @@ import {
   AlertTriangle,
   CheckCircle2,
   FileText,
-  Lock
+  Lock,
+  QrCode,
+  Camera,
+  Edit2,
+  Check
 } from "lucide-react";
 import MobileFrame from "../components/MobileFrame";
 import Header from "../components/Header";
+import ReceiveQRModal from "../components/ReceiveQRModal";
 import { SkeletonCard } from "../components/SkeletonLoader";
 import { useToast } from "../context/ToastContext";
 import API from "../services/api";
@@ -24,17 +29,26 @@ import API from "../services/api";
 export default function Profile() {
   const navigate = useNavigate();
   const toast = useToast();
+  const fileInputRef = useRef(null);
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
 
   const loadProfile = async () => {
     try {
       setLoading(true);
       const response = await API.get("/profile");
       setProfile(response.data.user);
+      setEditName(response.data.user.name);
+      setEditPhone(response.data.user.phone);
+      localStorage.setItem("palmPayUser", JSON.stringify(response.data.user));
     } catch (err) {
       console.error(err);
       toast.error("Unable to load profile data");
@@ -46,6 +60,54 @@ export default function Profile() {
   useEffect(() => {
     loadProfile();
   }, []);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit (< 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image file size should be less than 2MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target.result;
+      try {
+        const res = await API.put("/profile", { avatar: base64 });
+        if (res.data?.success) {
+          setProfile(res.data.user);
+          localStorage.setItem("palmPayUser", JSON.stringify(res.data.user));
+          toast.success("✓ Profile photo updated successfully!");
+        }
+      } catch (err) {
+        toast.error(err.response?.data?.message || "Failed to update profile photo");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveProfileEdit = async (e) => {
+    e.preventDefault();
+    setSavingEdit(true);
+    try {
+      const res = await API.put("/profile", {
+        name: editName.trim(),
+        phone: editPhone.trim(),
+      });
+      if (res.data?.success) {
+        setProfile(res.data.user);
+        localStorage.setItem("palmPayUser", JSON.stringify(res.data.user));
+        toast.success("✓ Profile information updated!");
+        setShowEditModal(false);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update profile");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleDeletePalmData = async () => {
     setDeleting(true);
@@ -79,8 +141,8 @@ export default function Profile() {
   return (
     <MobileFrame showBottomNav={true}>
       <Header
-        title="Profile & Privacy"
-        subtitle="Biometric Identity & Privacy Controls"
+        title="Profile & Settings"
+        subtitle="Identity, QR & Privacy Controls"
         showBack={true}
         backTo="/dashboard"
       />
@@ -91,15 +153,107 @@ export default function Profile() {
         </div>
       ) : (
         <div style={{ padding: "8px 0" }}>
-          {/* USER HEADER */}
-          <div style={{ textAlign: "center", margin: "10px 0 20px" }}>
-            <div className="user-avatar-large" style={{ margin: "0 auto 8px" }}>
-              {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+          {/* USER AVATAR & HEADER */}
+          <div style={{ textAlign: "center", margin: "10px 0 16px" }}>
+            <div style={{ position: "relative", width: "80px", height: "80px", margin: "0 auto 10px" }}>
+              {profile?.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.name}
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "3px solid var(--border-medium)",
+                    boxShadow: "0 4px 14px rgba(0, 0, 0, 0.1)",
+                  }}
+                />
+              ) : (
+                <div
+                  className="user-avatar-large"
+                  style={{ width: "80px", height: "80px", fontSize: "30px", margin: 0 }}
+                >
+                  {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+                </div>
+              )}
+
+              {/* UPLOAD / EDIT AVATAR CAMERA BUTTON */}
+              <button
+                type="button"
+                className="btn-icon"
+                onClick={() => fileInputRef.current?.click()}
+                title="Change Profile Photo"
+                style={{
+                  position: "absolute",
+                  bottom: "0",
+                  right: "-4px",
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "50%",
+                  background: "var(--color-brand)",
+                  color: "#ffffff",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
+                  padding: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Camera size={14} />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handleAvatarChange}
+              />
             </div>
-            <h2 style={{ fontSize: "18px", fontWeight: "800" }}>{profile?.name || "User"}</h2>
-            <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>
-              {profile?.email} • {profile?.phone || profile?.mobile}
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
+              <h2 style={{ fontSize: "19px", fontWeight: "800", margin: 0 }}>{profile?.name || "User"}</h2>
+              <button
+                className="btn-icon"
+                onClick={() => setShowEditModal(true)}
+                title="Edit name and mobile"
+                style={{ width: "24px", height: "24px", padding: 0 }}
+              >
+                <Edit2 size={13} className="text-muted" />
+              </button>
+            </div>
+
+            <span style={{ color: "var(--text-muted)", fontSize: "13px", display: "block", marginTop: "2px" }}>
+              {profile?.email} • +91 {profile?.phone}
             </span>
+          </div>
+
+          {/* MY QR CODE RECEIVE MONEY BANNER */}
+          <div
+            className="enterprise-card-box"
+            onClick={() => setShowQRModal(true)}
+            style={{
+              cursor: "pointer",
+              marginBottom: "14px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "var(--color-accent-blue)",
+              borderColor: "rgba(2, 132, 199, 0.3)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <div className="icon-badge-round" style={{ background: "#ffffff", color: "#0284c7" }}>
+                <QrCode size={20} />
+              </div>
+              <div>
+                <strong style={{ fontSize: "14px", display: "block", color: "#0284c7" }}>My Payment QR Code</strong>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                  Show QR to receive money into your Palm Pay wallet
+                </span>
+              </div>
+            </div>
+            <ChevronRight size={18} color="#0284c7" />
           </div>
 
           {/* STATUS CARDS */}
@@ -156,7 +310,7 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* PRIVACY & BIOMETRIC CONTROLS (SECTION 6) */}
+          {/* PRIVACY & BIOMETRIC CONTROLS */}
           <span style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: "8px", letterSpacing: "0.05em" }}>
             Biometric Privacy Controls
           </span>
@@ -238,6 +392,54 @@ export default function Profile() {
           >
             <LogOut size={16} style={{ marginRight: "6px" }} /> Log Out
           </button>
+        </div>
+      )}
+
+      {/* RECEIVE MONEY QR CODE MODAL */}
+      <ReceiveQRModal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        user={profile}
+      />
+
+      {/* EDIT PROFILE MODAL */}
+      {showEditModal && (
+        <div className="modal-backdrop" onClick={() => setShowEditModal(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+            <h3 style={{ fontSize: "18px", fontWeight: "800", marginBottom: "14px" }}>Edit Profile</h3>
+            <form onSubmit={handleSaveProfileEdit}>
+              <div style={{ marginBottom: "12px", textAlign: "left" }}>
+                <label className="input-label">Full Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div style={{ marginBottom: "16px", textAlign: "left" }}>
+                <label className="input-label">Mobile Number</label>
+                <input
+                  type="tel"
+                  maxLength="10"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <button className="btn-primary" type="submit" disabled={savingEdit} style={{ width: "100%", marginBottom: "10px" }}>
+                {savingEdit ? "Saving..." : "Save Changes"}
+              </button>
+
+              <button type="button" className="btn-outline" onClick={() => setShowEditModal(false)} style={{ width: "100%" }}>
+                Cancel
+              </button>
+            </form>
+          </div>
         </div>
       )}
 

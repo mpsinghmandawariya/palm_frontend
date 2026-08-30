@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
+    avatar: {
+      type: String,
+      default: "", // Base64 image data URL or avatar URL
+    },
+
     passwordHash: {
       type: String,
       required: true,

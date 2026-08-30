@@ -11,6 +11,17 @@ const logger = require("./utils/logger");
 const AppError = require("./utils/AppError");
 const errorHandler = require("./middleware/errorHandler");
 
+// Startup validation for critical environment variables
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === "production") {
+    logger.error("FATAL: JWT_SECRET environment variable is not set. Exiting process.");
+    process.exit(1);
+  } else {
+    logger.warn("WARNING: JWT_SECRET is not set in .env. Generating a session secret.");
+    process.env.JWT_SECRET = crypto.randomBytes(32).toString("hex");
+  }
+}
+
 // Route imports
 const authRoutes = require("./routes/authRoutes");
 const palmRoutes = require("./routes/palmRoutes");
@@ -68,7 +79,7 @@ app.get("/", (req, res) => {
   res.status(200).json({
     status: "ok",
     service: "Palm Pay Enterprise API",
-    version: "2.2.0",
+    version: "2.3.0",
     docs: "/api/health",
   });
 });

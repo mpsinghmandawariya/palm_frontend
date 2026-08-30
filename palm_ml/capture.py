@@ -58,24 +58,25 @@ def main():
 
             frame = cv2.flip(frame, 1)
             preview = frame.copy()
-            palm = extract_palm(frame, hands)
-            palm_detected = palm is not None
+            palm, num_hands = extract_palm(frame, hands)
+            palm_detected = palm is not None and num_hands == 1
 
             if palm_detected:
                 cv2.putText(preview, "Palm detected", (20, 115),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             else:
-                cv2.putText(preview, "Saving full frames - show one hand clearly", (20, 115),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
+                msg = "Multiple hands detected" if num_hands > 1 else "Show one hand clearly"
+                cv2.putText(preview, msg, (20, 115),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-            cv2.putText(preview, f"User: {user}  Captured: {count}", (20,35),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-            cv2.putText(preview, f"Target this run: {target_count}", (20,65),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2)
-            cv2.putText(preview, "P/A: pause   S/C/SPACE: save now   Q/ESC: quit", (20,90),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255,255,255), 2)
-            cv2.putText(preview, status_message, (20,145),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,0), 2)
+            cv2.putText(preview, f"User: {user}  Captured: {count}", (20, 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(preview, f"Target this run: {target_count}", (20, 65),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+            cv2.putText(preview, "P/A: pause   S/C/SPACE: save now   Q/ESC: quit", (20, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+            cv2.putText(preview, status_message, (20, 145),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 0), 2)
 
             cv2.imshow(WINDOW_NAME, preview)
             raw_key = cv2.waitKeyEx(1)

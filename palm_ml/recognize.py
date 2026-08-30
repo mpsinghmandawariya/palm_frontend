@@ -47,25 +47,27 @@ def main():
                 break
 
             frame = cv2.flip(frame, 1)
-            palm = extract_palm(frame, hands)
+            palm, num_hands = extract_palm(frame, hands)
 
             name = "No palm detected"
             score = 0.0
 
-            if palm is not None:
+            if palm is not None and num_hands == 1:
                 try:
                     vector = get_embedding(palm)
                     name, score = find_best_match(vector, database)
                 except Exception as exc:
                     name = "Embedding error"
                     print("[ERROR]", exc)
+            elif num_hands > 1:
+                name = "Multiple hands detected"
 
-            cv2.putText(frame, f"User: {name}", (20,40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,0), 2)
-            cv2.putText(frame, f"Similarity: {score:.3f}", (20,75),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
-            cv2.putText(frame, f"Threshold: {MATCH_THRESHOLD:.2f}", (20,105),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
+            cv2.putText(frame, f"User: {name}", (20, 40),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            cv2.putText(frame, f"Similarity: {score:.3f}", (20, 75),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(frame, f"Threshold: {MATCH_THRESHOLD:.2f}", (20, 105),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
             cv2.imshow("Palm Recognition Demo", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):

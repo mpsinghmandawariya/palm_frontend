@@ -12,7 +12,10 @@ const authMiddleware = async (req, res, next) => {
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "palm_pay_super_secret_2026");
+    if (!process.env.JWT_SECRET) {
+      return next(new AppError("Server configuration error: JWT_SECRET missing", 500, "CONFIG_ERROR"));
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id);
 
     if (!user) {

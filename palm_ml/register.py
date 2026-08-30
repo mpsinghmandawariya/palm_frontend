@@ -33,9 +33,9 @@ def main():
                     print("[WARN] Could not read:", path)
                     continue
 
-                palm = extract_palm(image, hands)
-                if palm is None:
-                    print("[WARN] No hand detected:", path)
+                palm, num_hands = extract_palm(image, hands)
+                if palm is None or num_hands != 1:
+                    print(f"[WARN] No single hand detected ({num_hands} hands): {path}")
                     continue
 
                 try:

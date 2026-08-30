@@ -64,7 +64,11 @@ def assess_quality(image):
     if image is None or image.size == 0:
         return 0.0
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if image.ndim == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+
     # Sharpness via Laplacian variance
     laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
     sharpness_score = min(1.0, laplacian_var / 500.0)
@@ -83,34 +87,40 @@ def detect_liveness(image):
     """
     Presentation Attack Detection (PAD).
     Evaluates high-frequency texture spectrum and color variance.
-    Returns liveness score between 0.0 and 1.0
+    Returns un-clamped liveness score between 0.0 and 1.0.
     """
     if image is None or image.size == 0:
         return 0.0
 
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    if image.ndim == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+
     h, w = gray.shape
 
-    # Frequency analysis via FFT to detect screen grid artifacts
+    # Frequency analysis via FFT to detect screen grid artifacts / flat printouts
     dft = cv2.dft(np.float32(gray), flags=cv2.DFT_COMPLEX_OUTPUT)
     dft_shift = np.fft.fftshift(dft)
     magnitude_spectrum = 20 * np.log(cv2.magnitude(dft_shift[:, :, 0], dft_shift[:, :, 1]) + 1e-6)
-    
-    # Calculate high-frequency energy ratio
+
+    # Calculate high-frequency energy ratio without artificial floors
     center_h, center_w = h // 2, w // 2
     r = 30
     mask = np.ones((h, w), np.uint8)
     cv2.circle(mask, (center_w, center_h), r, 0, -1)
-    
-    high_freq_energy = np.mean(magnitude_spectrum[mask == 1])
-    total_energy = np.mean(magnitude_spectrum)
-    
-    ratio = high_freq_energy / (total_energy + 1e-6)
-    liveness_score = min(1.0, max(0.4, ratio / 1.5))
-    
-    color_std = np.std(image)
-    if color_std < 15.0: # flat photo printout threshold
-        liveness_score *= 0.5
+
+    high_freq_energy = float(np.mean(magnitude_spectrum[mask == 1]))
+    total_energy = float(np.mean(magnitude_spectrum) + 1e-6)
+
+    ratio = high_freq_energy / total_energy
+    # Unclamped liveness score proportional to natural skin frequency dispersion
+    liveness_score = float(np.clip(ratio / 1.4, 0.0, 1.0))
+
+    if image.ndim == 3:
+        color_std = float(np.std(image))
+        if color_std < 18.0:  # flat photo printout threshold
+            liveness_score *= (color_std / 18.0)
 
     return round(float(np.clip(liveness_score, 0.0, 1.0)), 3)
 

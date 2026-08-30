@@ -1,35 +1,51 @@
+import os
+import time
+import json
+import cv2
+import numpy as np
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import cv2
-import numpy as np
-import json
-import time
 
-from config import IMAGE_SIZE, MATCH_THRESHOLD_VERIFY, MATCH_THRESHOLD_IDENTIFY, MIN_REGISTRATION_QUALITY
+from config import (
+    IMAGE_SIZE,
+    EMBEDDING_DIM,
+    MATCH_THRESHOLD_VERIFY,
+    MATCH_THRESHOLD_IDENTIFY,
+    MIN_REGISTRATION_QUALITY,
+    MIN_LIVENESS_SCORE,
+)
 from palm_utils import create_hands, extract_palm, cosine_similarity, assess_quality, detect_liveness
 from embedding import get_embedding
 
 START_TIME = time.time()
 
-# Pre-load MediaPipe and MobileNetV2 at startup (Module level, not per request)
-print("Initializing Biometric ML Pipeline (MediaPipe + MobileNetV2)...")
+# Pre-load MediaPipe Hands Detector at startup
+print("Initializing Biometric ML Pipeline (MediaPipe + Discriminative Palmprint Descriptors)...")
 HANDS_DETECTOR = create_hands(static_image_mode=True, max_num_hands=2)
-# Warm up MobileNetV2 embedding extractor
+
+# Warm up feature extractor
 dummy_img = np.zeros((IMAGE_SIZE, IMAGE_SIZE, 3), dtype=np.uint8)
 _ = get_embedding(dummy_img)
 print("ML Models loaded and ready.")
 
 app = FastAPI(
     title="Palm Pay ML Biometric Engine",
-    version="2.2.0",
-    description="Enterprise Palm Identification & Verification Service (MediaPipe + MobileNetV2)"
+    version="2.3.0",
+    description="Enterprise Discriminative Palm Identification & Verification Service"
 )
+
+# CORS explicit allow-list
+allowed_origins_env = os.getenv(
+    "ML_ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5000,http://127.0.0.1:5000,http://localhost,http://127.0.0.1"
+)
+allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -54,6 +70,7 @@ def health():
     return {
         "status": "ok",
         "model_loaded": True,
+        "embedding_dim": EMBEDDING_DIM,
         "uptime_seconds": round(time.time() - START_TIME, 1),
         "verify_threshold": MATCH_THRESHOLD_VERIFY,
         "identify_threshold": MATCH_THRESHOLD_IDENTIFY
@@ -72,8 +89,8 @@ def process_image_file(contents: bytes):
 async def register(file: UploadFile = File(...)):
     """
     1:1 Enrollment Pipeline:
-    Extracts 1280-d MobileNetV2 embedding from single-frame camera capture.
-    Raw image is never written to disk or database.
+    Extracts 1280-d biometric embedding from single-frame camera capture.
+    Raw image is processed in memory and never written to disk or database.
     """
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Invalid image content type")
@@ -103,9 +120,15 @@ async def register(file: UploadFile = File(...)):
             detail=f"Image quality score ({quality_score:.2f}) is below minimum threshold ({MIN_REGISTRATION_QUALITY:.2f}). Improve lighting and hold hand steady."
         )
 
+    if liveness_score < MIN_LIVENESS_SCORE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Anti-spoofing check failed (Liveness: {liveness_score:.2f} < {MIN_LIVENESS_SCORE:.2f}). Real 3D hand required."
+        )
+
     embedding = get_embedding(palm)
-    if embedding is None or len(embedding) != 1280:
-        raise HTTPException(status_code=500, detail="Failed to extract 1280-d biometric feature vector")
+    if embedding is None or len(embedding) != EMBEDDING_DIM:
+        raise HTTPException(status_code=500, detail=f"Failed to extract {EMBEDDING_DIM}-d biometric feature vector")
 
     return {
         "success": True,
@@ -129,8 +152,8 @@ async def verify(
 
     try:
         stored_vector = json.loads(target_embedding)
-        if not isinstance(stored_vector, list) or len(stored_vector) != 1280:
-            raise ValueError("Target embedding must be a 1280-dimensional float array")
+        if not isinstance(stored_vector, list) or len(stored_vector) != EMBEDDING_DIM:
+            raise ValueError(f"Target embedding must be a {EMBEDDING_DIM}-dimensional float array")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid target embedding format: {str(e)}")
 
@@ -149,6 +172,12 @@ async def verify(
 
     quality_score = assess_quality(palm)
     liveness_score = detect_liveness(palm)
+
+    if liveness_score < MIN_LIVENESS_SCORE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Anti-spoofing check failed (Liveness: {liveness_score:.2f} < {MIN_LIVENESS_SCORE:.2f}). Real 3D hand required."
+        )
 
     live_embedding = get_embedding(palm)
     if live_embedding is None:

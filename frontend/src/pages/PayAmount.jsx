@@ -8,10 +8,13 @@ import {
   Phone,
   CheckCircle2,
   ShieldCheck,
-  Search
+  Search,
+  QrCode,
+  Camera
 } from "lucide-react";
 import MobileFrame from "../components/MobileFrame";
 import Header from "../components/Header";
+import QRScannerModal from "../components/QRScannerModal";
 import { useToast } from "../context/ToastContext";
 import API from "../services/api";
 
@@ -25,6 +28,7 @@ export default function PayAmount() {
   const [recipientName, setRecipientName] = useState("");
   const [lookupUser, setLookupUser] = useState(null);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   const quickRecipients = [
     { name: "Starbucks Coffee", icon: <Coffee size={14} />, category: "Merchant" },
@@ -57,6 +61,20 @@ export default function PayAmount() {
       setLookupUser(null);
     }
   }, [mobileNumber]);
+
+  const handleQRScanSuccess = (scanData) => {
+    if (scanData.phone) {
+      setPayMode("MOBILE");
+      setMobileNumber(scanData.phone);
+      if (scanData.name) {
+        setRecipientName(scanData.name);
+      }
+      if (scanData.amount && scanData.amount > 0) {
+        setAmount(String(scanData.amount));
+      }
+      toast.success(`Scanned payment details for ${scanData.name || scanData.phone}!`);
+    }
+  };
 
   const handleContinue = (e) => {
     e.preventDefault();
@@ -100,10 +118,46 @@ export default function PayAmount() {
         subtitle="Step 1 of 2: Enter Amount & Payee"
         showBack={true}
         backTo="/dashboard"
+        rightActions={
+          <button
+            className="btn-icon"
+            onClick={() => setShowQRScanner(true)}
+            aria-label="Scan QR Code"
+            title="Scan Payment QR"
+          >
+            <Camera size={18} />
+          </button>
+        }
       />
 
+      {/* QUICK SCAN QR BANNER */}
+      <div
+        className="enterprise-card-box"
+        onClick={() => setShowQRScanner(true)}
+        style={{
+          cursor: "pointer",
+          margin: "8px 0 10px",
+          padding: "10px 14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          background: "var(--bg-subtle)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="icon-badge-round" style={{ width: "36px", height: "36px", background: "var(--color-accent-blue)", color: "#0284c7" }}>
+            <QrCode size={18} />
+          </div>
+          <div>
+            <strong style={{ fontSize: "13px", display: "block" }}>Scan QR Code</strong>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Scan Palm Pay or UPI QR to auto-fill</span>
+          </div>
+        </div>
+        <ArrowRight size={16} className="text-muted" />
+      </div>
+
       {/* PAY MODE SELECTOR TABS */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", margin: "10px 0 14px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", margin: "4px 0 12px" }}>
         <button
           type="button"
           className={`pill-tab ${payMode === "MOBILE" ? "active" : ""}`}
@@ -129,13 +183,13 @@ export default function PayAmount() {
         </button>
       </div>
 
-      <form onSubmit={handleContinue} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      <form onSubmit={handleContinue} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
         {/* AMOUNT ENTRY CARD */}
-        <div className="enterprise-card-box" style={{ textAlign: "center", padding: "20px 16px" }}>
+        <div className="enterprise-card-box" style={{ textAlign: "center", padding: "18px 16px" }}>
           <span style={{ fontSize: "12px", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: "700" }}>
             Payment Amount
           </span>
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", margin: "8px 0" }}>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", margin: "6px 0" }}>
             <span style={{ fontSize: "32px", fontWeight: "800", color: "var(--text-muted)", marginRight: "4px" }}>₹</span>
             <input
               type="number"
@@ -279,6 +333,13 @@ export default function PayAmount() {
           Cancel
         </button>
       </form>
+
+      {/* QR SCANNER MODAL */}
+      <QRScannerModal
+        isOpen={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        onScanSuccess={handleQRScanSuccess}
+      />
     </MobileFrame>
   );
 }

@@ -22,6 +22,9 @@ services:
       - "8000:8000"
     environment:
       - PORT=8000
+      - ML_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:5000,http://127.0.0.1:5000,http://localhost,http://127.0.0.1
+    volumes:
+      - keras_cache:/root/.keras/models
     networks:
       - palmpay-network
 
@@ -38,7 +41,7 @@ services:
       - NODE_ENV=production
       - MONGO_URI=mongodb://mongodb:27017/palm_pay
       - ML_SERVICE_URL=http://palm_ml:8000
-      - JWT_SECRET=e7b4e87dc0793751a029314cb6c51f33f67823f958f273be8e4695ce940733a1
+      - JWT_SECRET=${JWT_SECRET} # Provide in .env or secrets manager
       - MATCH_THRESHOLD_VERIFY=0.65
       - MATCH_THRESHOLD_IDENTIFY=0.78
     depends_on:
@@ -62,6 +65,7 @@ services:
 
 volumes:
   mongo_data:
+  keras_cache:
 
 networks:
   palmpay-network:

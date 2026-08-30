@@ -62,7 +62,8 @@ const identifyPalm = asyncHandler(async (req, res) => {
   }
 
   // Load candidate palm embeddings from database
-  const profiles = await PalmProfile.find({ embedding: { $exists: true, $size: 1280 } })
+  const EMBEDDING_DIM = PalmProfile.EMBEDDING_DIM || 1280;
+  const profiles = await PalmProfile.find({ embedding: { $exists: true, $size: EMBEDDING_DIM } })
     .populate("userId", "name email phone walletBalance")
     .lean();
 

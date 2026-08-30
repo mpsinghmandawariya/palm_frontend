@@ -19,6 +19,7 @@ const getWallet = asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       phone: user.phone,
+      avatar: user.avatar || "",
       palmRegistered: user.palmRegistered,
       role: user.role,
     },

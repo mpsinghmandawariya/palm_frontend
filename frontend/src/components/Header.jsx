@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Moon, Sun, Bell, HelpCircle, Activity } from "lucide-react";
+import { ArrowLeft, Moon, Sun, Bell, HelpCircle, Activity, QrCode } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import NotificationDrawer from "./NotificationDrawer";
 import HelpDrawer from "./HelpDrawer";
+import ReceiveQRModal from "./ReceiveQRModal";
 
 export default function Header({
   title = "EasyPay",
@@ -12,14 +13,26 @@ export default function Header({
   backTo = "/dashboard",
   rightActions = null,
   showMlHealth = false,
+  showQrReceive = true,
 }) {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
   const [showNotif, setShowNotif] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const [mlHealth, setMlHealth] = useState({ online: false, checking: true });
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem("palmPayUser");
+      if (stored) {
+        setCurrentUser(JSON.parse(stored));
+      }
+    } catch {
+      // Ignore parse error
+    }
+
     if (showMlHealth) {
       const checkHealth = async () => {
         try {
@@ -72,6 +85,18 @@ export default function Header({
             </div>
           )}
 
+          {/* MY QR CODE BUTTON TO RECEIVE MONEY */}
+          {showQrReceive && (
+            <button
+              className="btn-icon"
+              onClick={() => setShowQr(true)}
+              aria-label="Receive Money with QR Code"
+              title="My QR Code"
+            >
+              <QrCode size={18} />
+            </button>
+          )}
+
           {rightActions}
 
           <button
@@ -104,6 +129,11 @@ export default function Header({
         </div>
       </header>
 
+      <ReceiveQRModal
+        isOpen={showQr}
+        onClose={() => setShowQr(false)}
+        user={currentUser}
+      />
       <NotificationDrawer isOpen={showNotif} onClose={() => setShowNotif(false)} />
       <HelpDrawer isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </>

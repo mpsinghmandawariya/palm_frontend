@@ -47,4 +47,7 @@ const palmProfileSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("PalmProfile", palmProfileSchema);
+const PalmProfile = mongoose.model("PalmProfile", palmProfileSchema);
+PalmProfile.EMBEDDING_DIM = EMBEDDING_DIM;
+
+module.exports = PalmProfile;

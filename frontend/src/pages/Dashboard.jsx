@@ -4,15 +4,18 @@ import {
   Fingerprint,
   Plus,
   ArrowUpRight,
-  ArrowLeftRight,
   ShieldCheck,
   Store,
   ChevronRight,
-  Inbox
+  Inbox,
+  QrCode,
+  ArrowDownLeft,
+  RefreshCw
 } from "lucide-react";
 import MobileFrame from "../components/MobileFrame";
 import Header from "../components/Header";
 import { SkeletonCard, SkeletonTransactionList } from "../components/SkeletonLoader";
+import ReceiveQRModal from "../components/ReceiveQRModal";
 import { useToast } from "../context/ToastContext";
 import API from "../services/api";
 
@@ -24,7 +27,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [recentTransactions, setRecentTransactions] = useState([]);
 
-  // Top-Up Modal State
+  // Modals
+  const [showReceiveQR, setShowReceiveQR] = useState(false);
   const [showTopUp, setShowTopUp] = useState(false);
   const [topUpAmount, setTopUpAmount] = useState("1000");
   const [topUpLoading, setTopUpLoading] = useState(false);
@@ -34,10 +38,13 @@ export default function Dashboard() {
       setLoading(true);
       const [walletRes, txRes] = await Promise.all([
         API.get("/wallet"),
-        API.get("/transactions"),
+        API.get("/transactions?limit=10"),
       ]);
 
       setWallet(walletRes.data);
+      if (walletRes.data?.user) {
+        localStorage.setItem("palmPayUser", JSON.stringify(walletRes.data.user));
+      }
       setRecentTransactions(txRes.data.transactions || []);
     } catch (err) {
       console.error("Dashboard error:", err);
@@ -77,6 +84,7 @@ export default function Dashboard() {
   const user = wallet?.user;
   const balance = wallet?.balance ?? user?.walletBalance ?? 0;
   const isPalmRegistered = user?.palmRegistered ?? false;
+  const avatar = user?.avatar || "";
 
   const formatCurrency = (val) => {
     return new Intl.NumberFormat("en-IN", {
@@ -92,6 +100,7 @@ export default function Dashboard() {
         title="Palm Pay"
         subtitle="Biometric Wallet"
         showMlHealth={true}
+        showQrReceive={true}
       />
 
       {loading ? (
@@ -110,10 +119,24 @@ export default function Dashboard() {
                 <h2 className="balance-large-amount">{formatCurrency(balance)}</h2>
               </div>
 
-              <div className="balance-user-badge">
-                <span className="user-initial-bubble">
-                  {user?.name?.charAt(0)?.toUpperCase() || "U"}
-                </span>
+              <div className="balance-user-badge" onClick={() => navigate("/profile")} style={{ cursor: "pointer" }}>
+                {avatar ? (
+                  <img
+                    src={avatar}
+                    alt={user?.name}
+                    style={{
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "2px solid var(--border-medium)",
+                    }}
+                  />
+                ) : (
+                  <span className="user-initial-bubble">
+                    {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                  </span>
+                )}
                 <span className="user-greeting-name">{user?.name?.split(" ")[0] || "User"}</span>
               </div>
             </div>
@@ -134,24 +157,33 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* TWO PRIMARY ACTIONS: [ PAY ] and [ ADD MONEY ] */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "8px" }}>
+            {/* THREE PRIMARY ACTIONS: [ PAY ] [ RECEIVE QR ] [ ADD MONEY ] */}
+            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", marginTop: "10px" }}>
               <button
                 className="btn-primary"
                 onClick={() => navigate("/pay")}
-                style={{ width: "100%", padding: "12px" }}
+                style={{ padding: "10px 8px", fontSize: "13px" }}
               >
-                <Fingerprint size={18} style={{ marginRight: "6px" }} />
+                <Fingerprint size={16} style={{ marginRight: "4px" }} />
                 Pay
               </button>
 
               <button
                 className="btn-outline"
-                onClick={() => setShowTopUp(true)}
-                style={{ width: "100%", padding: "12px" }}
+                onClick={() => setShowReceiveQR(true)}
+                style={{ padding: "10px 8px", fontSize: "13px" }}
               >
-                <Plus size={16} style={{ marginRight: "6px" }} />
-                Add Money
+                <QrCode size={15} style={{ marginRight: "4px" }} />
+                Receive
+              </button>
+
+              <button
+                className="btn-outline"
+                onClick={() => setShowTopUp(true)}
+                style={{ padding: "10px 8px", fontSize: "13px" }}
+              >
+                <Plus size={15} style={{ marginRight: "4px" }} />
+                Top Up
               </button>
             </div>
           </div>
@@ -212,10 +244,11 @@ export default function Dashboard() {
                 <ChevronRight size={16} className="text-muted" />
               </div>
             ) : (
-              recentTransactions.slice(0, 4).map((tx) => {
+              recentTransactions.slice(0, 5).map((tx) => {
                 const isTopUp = tx.type === "WALLET_TOPUP";
-                const isWithdraw = tx.type === "WITHDRAWAL";
+                const isReceived = tx.type === "RECEIVED";
                 const isPos = tx.type === "POS_PAYMENT";
+                const isTransfer = tx.type === "TRANSFER";
 
                 let icon = <Fingerprint size={18} />;
                 let avatarBg = "var(--bg-subtle)";
@@ -225,22 +258,28 @@ export default function Dashboard() {
                   icon = <Plus size={18} />;
                   avatarBg = "var(--color-accent-green)";
                   iconColor = "var(--color-success)";
-                } else if (isWithdraw) {
-                  icon = <ArrowUpRight size={18} />;
-                  avatarBg = "var(--color-accent-blue)";
-                  iconColor = "#0284c7";
+                } else if (isReceived) {
+                  icon = <ArrowDownLeft size={18} />;
+                  avatarBg = "var(--color-accent-green)";
+                  iconColor = "var(--color-success)";
                 } else if (isPos) {
                   icon = <Store size={18} />;
                   avatarBg = "var(--accent-purple)";
                   iconColor = "#9333ea";
+                } else if (isTransfer) {
+                  icon = <ArrowUpRight size={18} />;
+                  avatarBg = "var(--color-accent-blue)";
+                  iconColor = "#0284c7";
                 }
 
                 const title = tx.recipientName || (
                   isTopUp ? "Wallet Deposit" :
-                  isWithdraw ? "Bank Withdrawal" :
+                  isReceived ? "Money Received" :
                   isPos ? "Store POS Terminal" :
                   "Palm Payment"
                 );
+
+                const isCredit = isTopUp || isReceived;
 
                 return (
                   <div
@@ -260,15 +299,16 @@ export default function Dashboard() {
                             day: "numeric",
                           })}
                           {tx.matchScore ? ` • ${tx.matchScore}% Match` : ""}
+                          {tx.authMethod ? ` • ${tx.authMethod}` : ""}
                         </span>
                       </div>
                     </div>
 
                     <div
                       className="tx-compact-amount"
-                      style={{ color: isTopUp ? "var(--color-success)" : "var(--text-primary)", fontWeight: "700" }}
+                      style={{ color: isCredit ? "var(--color-success)" : "var(--text-primary)", fontWeight: "700" }}
                     >
-                      {isTopUp ? "+ " : "- "}
+                      {isCredit ? "+ " : "- "}
                       {formatCurrency(tx.amount)}
                     </div>
                   </div>
@@ -278,6 +318,13 @@ export default function Dashboard() {
           </div>
         </>
       )}
+
+      {/* RECEIVE MONEY QR CODE MODAL */}
+      <ReceiveQRModal
+        isOpen={showReceiveQR}
+        onClose={() => setShowReceiveQR(false)}
+        user={user}
+      />
 
       {/* TOP-UP MODAL */}
       {showTopUp && (
