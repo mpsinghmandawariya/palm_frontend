@@ -1,17 +1,29 @@
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
 import numpy as np
 import json
 import time
 
-from config import IMAGE_SIZE, MATCH_THRESHOLD
+from config import IMAGE_SIZE, MATCH_THRESHOLD_VERIFY, MATCH_THRESHOLD_IDENTIFY, MIN_REGISTRATION_QUALITY
 from palm_utils import create_hands, extract_palm, cosine_similarity, assess_quality, detect_liveness
 from embedding import get_embedding
 
+START_TIME = time.time()
+
+# Pre-load MediaPipe and MobileNetV2 at startup (Module level, not per request)
+print("Initializing Biometric ML Pipeline (MediaPipe + MobileNetV2)...")
+HANDS_DETECTOR = create_hands(static_image_mode=True, max_num_hands=2)
+# Warm up MobileNetV2 embedding extractor
+dummy_img = np.zeros((IMAGE_SIZE, IMAGE_SIZE, 3), dtype=np.uint8)
+_ = get_embedding(dummy_img)
+print("ML Models loaded and ready.")
+
 app = FastAPI(
-    title="Palm Pay ML Service",
-    version="2.0.0"
+    title="Palm Pay ML Biometric Engine",
+    version="2.2.0",
+    description="Enterprise Palm Identification & Verification Service (MediaPipe + MobileNetV2)"
 )
 
 app.add_middleware(
@@ -23,13 +35,28 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail}
+        )
+    print("Unhandled ML service error:", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal ML Error: {str(exc)}"}
+    )
+
+
 @app.get("/health")
 def health():
     return {
-        "success": True,
-        "status": "healthy",
-        "service": "Palm Pay ML Engine v2.0",
-        "capabilities": ["palm_detection", "mobilenet_v2_embedding", "quality_assessment", "liveness_pad"]
+        "status": "ok",
+        "model_loaded": True,
+        "uptime_seconds": round(time.time() - START_TIME, 1),
+        "verify_threshold": MATCH_THRESHOLD_VERIFY,
+        "identify_threshold": MATCH_THRESHOLD_IDENTIFY
     }
 
 
@@ -43,61 +70,49 @@ def process_image_file(contents: bytes):
 
 @app.post("/register")
 async def register(file: UploadFile = File(...)):
-    start_time = time.time()
+    """
+    1:1 Enrollment Pipeline:
+    Extracts 1280-d MobileNetV2 embedding from single-frame camera capture.
+    Raw image is never written to disk or database.
+    """
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Please upload a valid image file")
+        raise HTTPException(status_code=400, detail="Invalid image content type")
 
-    try:
-        contents = await file.read()
-        image = process_image_file(contents)
+    contents = await file.read()
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Empty image file received")
 
-        if image is None:
-            raise HTTPException(status_code=400, detail="Invalid image file")
+    image = process_image_file(contents)
+    if image is None:
+        raise HTTPException(status_code=400, detail="Corrupted or unreadable image file")
 
-        hands = create_hands(static_image_mode=True)
-        try:
-            palm = extract_palm(image, hands)
-        finally:
-            hands.close()
+    palm, num_hands = extract_palm(image, HANDS_DETECTOR)
 
-        if palm is None:
-            return {
-                "success": False,
-                "message": "No palm detected in the image. Position your hand clearly inside the frame.",
-                "quality_score": 0.0,
-                "liveness_score": 0.0,
-                "embedding": None
-            }
+    if num_hands == 0:
+        raise HTTPException(status_code=422, detail="No hand detected in the frame. Place your open palm clearly inside the guide.")
 
-        quality_score = assess_quality(palm)
-        liveness_score = detect_liveness(palm)
+    if num_hands > 1:
+        raise HTTPException(status_code=422, detail="Multiple hands detected. Please place only one hand in the frame.")
 
-        if quality_score < 0.35:
-            return {
-                "success": False,
-                "message": "Image quality too low or blurry. Improve lighting and hold hand steady.",
-                "quality_score": quality_score,
-                "liveness_score": liveness_score,
-                "embedding": None
-            }
+    quality_score = assess_quality(palm)
+    liveness_score = detect_liveness(palm)
 
-        embedding = get_embedding(palm)
-        processing_time = round((time.time() - start_time) * 1000, 2)
+    if quality_score < MIN_REGISTRATION_QUALITY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Image quality score ({quality_score:.2f}) is below minimum threshold ({MIN_REGISTRATION_QUALITY:.2f}). Improve lighting and hold hand steady."
+        )
 
-        return {
-            "success": True,
-            "message": "Palm successfully registered",
-            "quality_score": quality_score,
-            "liveness_score": liveness_score,
-            "processing_time_ms": processing_time,
-            "embedding": embedding.tolist()
-        }
+    embedding = get_embedding(palm)
+    if embedding is None or len(embedding) != 1280:
+        raise HTTPException(status_code=500, detail="Failed to extract 1280-d biometric feature vector")
 
-    except HTTPException:
-        raise
-    except Exception as error:
-        print("Registration error:", error)
-        raise HTTPException(status_code=500, detail=f"Palm registration failed: {str(error)}")
+    return {
+        "success": True,
+        "embedding": embedding.tolist(),
+        "quality_score": quality_score,
+        "liveness_score": liveness_score,
+    }
 
 
 @app.post("/verify")
@@ -105,77 +120,114 @@ async def verify(
     file: UploadFile = File(...),
     target_embedding: str = Form(...)
 ):
-    start_time = time.time()
+    """
+    1:1 Verification Pipeline:
+    Compares live palm scan against a single user's stored 1280-d embedding.
+    """
     if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Please upload a valid image")
+        raise HTTPException(status_code=400, detail="Invalid image content type")
 
     try:
-        try:
-            stored_vector = json.loads(target_embedding)
-            if not isinstance(stored_vector, list) or len(stored_vector) == 0:
-                raise ValueError("Target embedding must be a non-empty list")
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid target embedding format: {str(e)}")
+        stored_vector = json.loads(target_embedding)
+        if not isinstance(stored_vector, list) or len(stored_vector) != 1280:
+            raise ValueError("Target embedding must be a 1280-dimensional float array")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid target embedding format: {str(e)}")
 
-        contents = await file.read()
-        image = process_image_file(contents)
+    contents = await file.read()
+    image = process_image_file(contents)
+    if image is None:
+        raise HTTPException(status_code=400, detail="Invalid or unreadable image file")
 
-        if image is None:
-            raise HTTPException(status_code=400, detail="Invalid image file")
+    palm, num_hands = extract_palm(image, HANDS_DETECTOR)
 
-        hands = create_hands(static_image_mode=True)
-        try:
-            palm = extract_palm(image, hands)
-        finally:
-            hands.close()
+    if num_hands == 0:
+        raise HTTPException(status_code=422, detail="No palm detected in frame. Hold your open hand over the camera.")
 
-        processing_time = round((time.time() - start_time) * 1000, 2)
+    if num_hands > 1:
+        raise HTTPException(status_code=422, detail="Multiple hands detected in frame.")
 
-        if palm is None:
-            return {
-                "success": False,
-                "verified": False,
-                "similarity": 0.0,
-                "threshold": MATCH_THRESHOLD,
-                "quality_score": 0.0,
-                "liveness_score": 0.0,
-                "processing_time_ms": processing_time,
-                "message": "No palm detected in frame. Hold your hand steady."
-            }
+    quality_score = assess_quality(palm)
+    liveness_score = detect_liveness(palm)
 
-        quality_score = assess_quality(palm)
-        liveness_score = detect_liveness(palm)
+    live_embedding = get_embedding(palm)
+    if live_embedding is None:
+        raise HTTPException(status_code=500, detail="Failed to compute live palm embedding")
 
-        live_embedding = get_embedding(palm)
-        if live_embedding is None:
-            return {
-                "success": False,
-                "verified": False,
-                "similarity": 0.0,
-                "threshold": MATCH_THRESHOLD,
-                "quality_score": quality_score,
-                "liveness_score": liveness_score,
-                "processing_time_ms": processing_time,
-                "message": "Failed to compute palm embedding"
-            }
+    score = cosine_similarity(live_embedding, stored_vector)
+    is_verified = bool(score >= MATCH_THRESHOLD_VERIFY)
 
-        score = cosine_similarity(live_embedding, stored_vector)
-        is_verified = bool(score >= MATCH_THRESHOLD)
-        processing_time = round((time.time() - start_time) * 1000, 2)
+    return {
+        "verified": is_verified,
+        "score": round(float(score), 4),
+        "quality_score": quality_score,
+        "liveness_score": liveness_score,
+        "threshold": MATCH_THRESHOLD_VERIFY
+    }
 
+
+@app.post("/identify")
+async def identify(
+    file: UploadFile = File(...),
+    candidates: str = Form(...),
+    threshold: float = Form(MATCH_THRESHOLD_IDENTIFY)
+):
+    """
+    1:N Identification Pipeline:
+    Compares live scan against candidate stored embeddings to find best match.
+    """
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid image content type")
+
+    try:
+        candidate_list = json.loads(candidates)
+        if not isinstance(candidate_list, list) or len(candidate_list) == 0:
+            raise ValueError("Candidates list cannot be empty")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid candidates format: {str(e)}")
+
+    contents = await file.read()
+    image = process_image_file(contents)
+    if image is None:
+        raise HTTPException(status_code=400, detail="Invalid image file")
+
+    palm, num_hands = extract_palm(image, HANDS_DETECTOR)
+
+    if num_hands == 0:
+        raise HTTPException(status_code=422, detail="No palm detected in frame. Hold hand steady over scanner.")
+
+    if num_hands > 1:
+        raise HTTPException(status_code=422, detail="Multiple hands detected. Scanner requires exactly one palm.")
+
+    live_embedding = get_embedding(palm)
+    if live_embedding is None:
+        raise HTTPException(status_code=500, detail="Failed to extract palm features")
+
+    # 1:N Linear Search (Cosine similarity across candidate embeddings)
+    best_match_id = None
+    best_score = -1.0
+
+    for cand in candidate_list:
+        cand_id = cand.get("id") or cand.get("userId")
+        cand_vec = cand.get("embedding")
+        if not cand_id or not cand_vec:
+            continue
+
+        score = cosine_similarity(live_embedding, cand_vec)
+        if score > best_score:
+            best_score = score
+            best_match_id = cand_id
+
+    if best_match_id is not None and best_score >= threshold:
         return {
-            "success": True,
-            "verified": is_verified,
-            "similarity": round(float(score), 4),
-            "threshold": MATCH_THRESHOLD,
-            "quality_score": quality_score,
-            "liveness_score": liveness_score,
-            "processing_time_ms": processing_time,
-            "message": "Palm verified successfully" if is_verified else f"Palm match failed (similarity {score:.2f} < {MATCH_THRESHOLD:.2f})"
+            "match": {
+                "id": str(best_match_id),
+                "score": round(float(best_score), 4)
+            }
         }
-
-    except HTTPException:
-        raise
-    except Exception as error:
-        print("Verification error:", error)
-        raise HTTPException(status_code=500, detail=f"Palm verification failed: {str(error)}")
+    else:
+        return {
+            "match": None,
+            "best_score": round(float(max(best_score, 0.0)), 4),
+            "threshold": threshold
+        }

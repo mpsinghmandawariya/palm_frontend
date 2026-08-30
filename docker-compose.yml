@@ -1,0 +1,68 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: palmpay-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - palmpay-network
+
+  palm_ml:
+    build:
+      context: ./palm_ml
+      dockerfile: Dockerfile
+    container_name: palmpay-ml
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    networks:
+      - palmpay-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: palmpay-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongodb:27017/palm_pay
+      - ML_SERVICE_URL=http://palm_ml:8000
+      - JWT_SECRET=e7b4e87dc0793751a029314cb6c51f33f67823f958f273be8e4695ce940733a1
+      - MATCH_THRESHOLD_VERIFY=0.65
+      - MATCH_THRESHOLD_IDENTIFY=0.78
+    depends_on:
+      - mongodb
+      - palm_ml
+    networks:
+      - palmpay-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: palmpay-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - palmpay-network
+
+volumes:
+  mongo_data:
+
+networks:
+  palmpay-network:
+    driver: bridge

@@ -6,22 +6,34 @@ from config import IMAGE_SIZE
 
 mp_hands = mp.solutions.hands
 
-def create_hands(static_image_mode=True):
+def create_hands(static_image_mode=True, max_num_hands=2):
     return mp_hands.Hands(
         static_image_mode=static_image_mode,
-        max_num_hands=1,
+        max_num_hands=max_num_hands,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     )
 
 def extract_palm(image, hands):
+    """
+    Detects hands in the input image.
+    Returns (cropped_palm_image, hand_count)
+    - hand_count == 0: No hand found
+    - hand_count > 1: Multiple hands found (ambiguous)
+    - hand_count == 1: Exactly one hand found, returns cropped palm ROI
+    """
     if image is None or image.size == 0:
-        return None
+        return None, 0
 
     rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     result = hands.process(rgb)
+
     if not result.multi_hand_landmarks:
-        return None
+        return None, 0
+
+    num_hands = len(result.multi_hand_landmarks)
+    if num_hands > 1:
+        return None, num_hands
 
     landmarks = result.multi_hand_landmarks[0].landmark
     h, w = image.shape[:2]
@@ -39,9 +51,10 @@ def extract_palm(image, hands):
 
     crop = image[y1:y2, x1:x2]
     if crop.size == 0:
-        return None
+        return None, 0
 
-    return cv2.resize(crop, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_AREA)
+    resized = cv2.resize(crop, (IMAGE_SIZE, IMAGE_SIZE), interpolation=cv2.INTER_AREA)
+    return resized, 1
 
 def assess_quality(image):
     """
@@ -95,7 +108,6 @@ def detect_liveness(image):
     ratio = high_freq_energy / (total_energy + 1e-6)
     liveness_score = min(1.0, max(0.4, ratio / 1.5))
     
-    # Add random skin texture noise simulation factor
     color_std = np.std(image)
     if color_std < 15.0: # flat photo printout threshold
         liveness_score *= 0.5

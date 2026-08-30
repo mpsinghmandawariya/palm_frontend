@@ -2,14 +2,28 @@ const mongoose = require("mongoose");
 
 const merchantSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    businessName: { type: String, required: true },
-    category: { type: String, default: "Retail" },
-    merchantQrCode: { type: String, required: true },
-    totalSalesVolume: { type: Number, default: 0 },
-    settlementAccount: { type: String, default: "HDFC-****-9821" },
+    ownerUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      unique: true,
+    },
+
+    businessName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    walletBalance: {
+      type: Number,
+      default: 0,
+      min: [0, "Merchant wallet balance cannot be negative"],
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
 module.exports = mongoose.model("Merchant", merchantSchema);

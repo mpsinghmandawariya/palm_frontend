@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+const EMBEDDING_DIM = 1280;
+
 const palmProfileSchema = new mongoose.Schema(
   {
     userId: {
@@ -9,15 +11,30 @@ const palmProfileSchema = new mongoose.Schema(
       unique: true,
     },
 
-    palmImage: {
-      type: String,
-      required: true,
+    embedding: {
+      type: [Number],
+      required: [true, "Biometric embedding array is required"],
+      validate: {
+        validator: function (v) {
+          return Array.isArray(v) && v.length === EMBEDDING_DIM;
+        },
+        message: (props) =>
+          `Biometric embedding must have exactly ${EMBEDDING_DIM} dimensions, received ${props.value ? props.value.length : 0}`,
+      },
     },
 
-    status: {
-      type: String,
-      enum: ["registered", "pending"],
-      default: "registered",
+    qualityScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 1,
+    },
+
+    livenessScore: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 1,
     },
 
     registeredAt: {
@@ -30,7 +47,4 @@ const palmProfileSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model(
-  "PalmProfile",
-  palmProfileSchema
-);
+module.exports = mongoose.model("PalmProfile", palmProfileSchema);

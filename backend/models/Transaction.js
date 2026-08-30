@@ -2,52 +2,72 @@ const mongoose = require("mongoose");
 
 const transactionSchema = new mongoose.Schema(
   {
-    userId: {
+    transactionId: {
+      type: String,
+      default: () => `PALM-TX-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`,
+      index: true,
+    },
+
+    payerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
       index: true,
     },
 
-    amount: {
-      type: Number,
-      required: true,
-      min: 0.01,
+    recipientUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
     },
 
-    type: {
-      type: String,
-      enum: ["PALM_PAYMENT", "TRANSFER", "WALLET_TOPUP", "BILL_PAYMENT"],
-      default: "PALM_PAYMENT",
-      required: true,
+    merchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Merchant",
+      default: null,
     },
 
     recipientName: {
       type: String,
-      default: "Merchant / Palm Payee",
+      required: true,
+      trim: true,
     },
 
     recipientPhone: {
       type: String,
-      default: "",
+      default: null,
+      trim: true,
     },
 
-    category: {
+    amount: {
+      type: Number,
+      required: true,
+      min: [0.01, "Transaction amount must be positive"],
+    },
+
+    type: {
       type: String,
-      default: "Payment",
+      enum: ["PALM_PAYMENT", "WALLET_TOPUP", "POS_PAYMENT", "TRANSFER", "RECEIVED"],
+      required: true,
     },
 
     status: {
       type: String,
-      enum: ["COMPLETED", "FAILED", "PENDING"],
-      default: "COMPLETED",
+      enum: ["SUCCESS", "FAILED"],
+      required: true,
+      default: "SUCCESS",
     },
 
-    transactionId: {
+    authMethod: {
       type: String,
-      required: true,
-      unique: true,
-      index: true,
+      enum: ["PALM", "PIN", null],
+      default: null,
+    },
+
+    matchScore: {
+      type: Number,
+      default: null,
     },
   },
   {
@@ -55,7 +75,4 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model(
-  "Transaction",
-  transactionSchema
-);
+module.exports = mongoose.model("Transaction", transactionSchema);

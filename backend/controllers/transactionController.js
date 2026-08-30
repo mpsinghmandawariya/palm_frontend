@@ -1,63 +1,55 @@
 const Transaction = require("../models/Transaction");
+const AppError = require("../utils/AppError");
+const asyncHandler = require("../utils/asyncHandler");
 
-const getTransactions = async (req, res) => {
-  try {
-    const transactions = await Transaction.find({
-      userId: req.userId,
-    })
+const getTransactions = asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+  const skip = (page - 1) * limit;
+
+  const filter = { payerId: req.userId };
+  if (req.query.type) {
+    filter.type = req.query.type;
+  }
+
+  const [transactions, totalCount] = await Promise.all([
+    Transaction.find(filter)
       .sort({ createdAt: -1 })
-      .lean();
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Transaction.countDocuments(filter),
+  ]);
 
-    res.json({
-      success: true,
-      transactions,
-    });
-  } catch (error) {
-    console.error(
-      "Transaction history error:",
-      error
-    );
+  const totalPages = Math.ceil(totalCount / limit) || 1;
 
-    res.status(500).json({
-      success: false,
-      message: "Unable to load transactions",
-    });
+  res.status(200).json({
+    success: true,
+    transactions,
+    page,
+    limit,
+    totalPages,
+    totalCount,
+  });
+});
+
+const getTransactionById = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  const transaction = await Transaction.findOne({
+    _id: id,
+    payerId: req.userId,
+  });
+
+  if (!transaction) {
+    throw new AppError("Transaction not found", 404, "TRANSACTION_NOT_FOUND");
   }
-};
 
-
-const getTransactionById = async (req, res) => {
-  try {
-    const transaction =
-      await Transaction.findOne({
-        _id: req.params.id,
-        userId: req.userId,
-      });
-
-    if (!transaction) {
-      return res.status(404).json({
-        success: false,
-        message: "Transaction not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      transaction,
-    });
-  } catch (error) {
-    console.error(
-      "Transaction details error:",
-      error
-    );
-
-    res.status(500).json({
-      success: false,
-      message: "Unable to load transaction",
-    });
-  }
-};
-
+  res.status(200).json({
+    success: true,
+    transaction,
+  });
+});
 
 module.exports = {
   getTransactions,

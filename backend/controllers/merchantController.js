@@ -11,7 +11,7 @@ const getMerchantDetails = async (req, res) => {
         userId: req.userId,
         businessName: `${user.name}'s Store`,
         category: "Retail & Commerce",
-        merchantQrCode: `EP-QR-${req.userId}`,
+        merchantQrCode: `PALM-QR-${req.userId}`,
         totalSalesVolume: 12450,
       });
     }

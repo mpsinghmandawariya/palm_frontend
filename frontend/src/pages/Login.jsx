@@ -1,18 +1,22 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Fingerprint, Lock, Mail, ArrowRight, ShieldCheck, Moon, Sun } from "lucide-react";
 import MobileFrame from "../components/MobileFrame";
-import { EasyPayLogo, OnboardingIllustration } from "../components/Illustrations";
+import { OnboardingIllustration } from "../components/Illustrations";
+import { useTheme } from "../context/ThemeContext";
+import { useToast } from "../context/ToastContext";
 import API from "../services/api";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [showLoginForm, setShowLoginForm] = useState(false);
+  const { isDark, toggleTheme } = useTheme();
+  const toast = useToast();
 
+  const [showLoginForm, setShowLoginForm] = useState(false);
   const [form, setForm] = useState({
     identifier: "",
     password: "",
   });
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
@@ -24,19 +28,24 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
-      const response = await API.post("/auth/login", form);
+      const cleanId = form.identifier.trim();
+      const response = await API.post("/auth/login", {
+        identifier: cleanId,
+        email: cleanId,
+        password: form.password,
+      });
       const data = response.data;
 
       localStorage.setItem("palmPayToken", data.token);
       localStorage.setItem("palmPayUser", JSON.stringify(data.user));
 
+      toast.success(`✓ Welcome back, ${data.user.name.split(" ")[0]}!`);
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || "Invalid login credentials. Please try again.");
+      toast.error(err.response?.data?.message || "Invalid login credentials. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -44,12 +53,24 @@ export default function Login() {
 
   return (
     <MobileFrame showBottomNav={false}>
+      {/* THEME TOGGLE AT TOP RIGHT */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "10px 0 0" }}>
+        <button
+          className="btn-icon"
+          onClick={toggleTheme}
+          title="Toggle theme"
+          aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      </div>
+
       {!showLoginForm ? (
         /* SCREEN 1: ONBOARDING VIEW */
         <div className="onboarding-screen">
           <div className="brand-header-logo">
-            <EasyPayLogo size={26} />
-            <span>EasyPay</span>
+            <div className="brand-logo-icon">🖐</div>
+            <span>Palm Pay</span>
           </div>
 
           <div className="hero-illustration-box">
@@ -63,69 +84,77 @@ export default function Login() {
           </div>
 
           <div className="onboarding-text-content">
-            <h1>Easy Online Payment</h1>
-            <p>Make your payment experience more better today. No additional admin fee</p>
+            <h1>Contactless Palm Biometrics</h1>
+            <p>Pay instantly with your palm print. Zero physical cards, zero passwords, 100% encrypted.</p>
           </div>
 
           <div className="onboarding-actions">
-            <button className="btn-black" onClick={() => setShowLoginForm(true)}>
-              Login
+            <button className="btn-primary" onClick={() => setShowLoginForm(true)} style={{ width: "100%" }}>
+              Sign In to Wallet
             </button>
-            <button className="btn-outline" onClick={() => navigate("/register")}>
-              Sign Up
+            <button className="btn-outline" onClick={() => navigate("/register")} style={{ width: "100%" }}>
+              Create New Account
             </button>
           </div>
         </div>
       ) : (
         /* SCREEN 1: LOGIN FORM VIEW */
         <div style={{ paddingTop: "10px" }}>
-          <button className="back-header-btn" onClick={() => setShowLoginForm(false)}>
-            ← Back
+          <button className="btn-link" onClick={() => setShowLoginForm(false)} style={{ marginBottom: "14px" }}>
+            ← Back to Intro
           </button>
 
-          <div style={{ textAlign: "center", margin: "20px 0 30px" }}>
-            <div style={{ display: "inline-flex", marginBottom: "12px" }}>
-              <EasyPayLogo size={36} />
+          <div style={{ textAlign: "center", margin: "14px 0 24px" }}>
+            <div className="icon-badge-round" style={{ width: "56px", height: "56px", margin: "0 auto 10px" }}>
+              <Fingerprint size={28} />
             </div>
-            <h2 style={{ fontSize: "24px" }}>Welcome Back</h2>
-            <p style={{ color: "#767676", fontSize: "14px", marginTop: "4px" }}>
-              Sign in to your EasyPay digital wallet
+            <h2 style={{ fontSize: "22px", fontWeight: "800" }}>Welcome Back</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "13px", marginTop: "4px" }}>
+              Sign in to your Palm Pay enterprise wallet
             </p>
           </div>
 
-          {error && <div className="error-banner">{error}</div>}
-
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
             <div>
               <label className="input-label">Email or Mobile Number</label>
-              <input
-                name="identifier"
-                type="text"
-                placeholder="e.g. user@example.com"
-                value={form.identifier}
-                onChange={handleChange}
-                required
-                autoFocus
-              />
+              <div className="input-with-icon">
+                <Mail size={16} className="input-leading-icon" />
+                <input
+                  name="identifier"
+                  type="text"
+                  placeholder="e.g. user@example.com or 9876543210"
+                  value={form.identifier}
+                  onChange={handleChange}
+                  className="form-input"
+                  style={{ paddingLeft: "38px" }}
+                  required
+                  autoFocus
+                />
+              </div>
             </div>
 
             <div>
-              <label className="input-label">Password</label>
-              <input
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                value={form.password}
-                onChange={handleChange}
-                required
-              />
+              <label className="input-label">Account Password</label>
+              <div className="input-with-icon">
+                <Lock size={16} className="input-leading-icon" />
+                <input
+                  name="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={form.password}
+                  onChange={handleChange}
+                  className="form-input"
+                  style={{ paddingLeft: "38px" }}
+                  required
+                />
+              </div>
             </div>
 
             <button
-              className="btn-black"
+              className="btn-primary"
               type="submit"
               disabled={loading}
-              style={{ marginTop: "14px" }}
+              style={{ marginTop: "10px", width: "100%" }}
             >
               {loading ? "Signing in..." : "Sign In"}
             </button>
@@ -134,6 +163,7 @@ export default function Login() {
               type="button"
               className="btn-outline"
               onClick={() => navigate("/register")}
+              style={{ width: "100%" }}
             >
               Create New Account
             </button>

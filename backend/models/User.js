@@ -14,50 +14,47 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Please enter a valid email address"],
     },
 
-    mobile: {
+    phone: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
 
-    dob: {
-      type: Date,
-      required: true,
-    },
-
-    gender: {
-      type: String,
-      enum: ["Male", "Female", "Other"],
-      required: false,
-    },
-
-    aadhaarTestId: {
+    passwordHash: {
       type: String,
       required: true,
-    },
-
-    password: {
-      type: String,
-      required: true,
+      select: false, // Never return by default
     },
 
     pin: {
       type: String,
       required: true,
+      select: false, // Never return by default
     },
 
     walletBalance: {
       type: Number,
-      default: 5000,
-      min: 0,
+      default: 0,
+      min: [0, "Wallet balance cannot be negative"],
     },
 
     palmRegistered: {
       type: Boolean,
       default: false,
+    },
+
+    consentGivenAt: {
+      type: Date,
+      default: null, // BIPA & GDPR Article 9 explicit biometric consent timestamp
+    },
+
+    role: {
+      type: String,
+      enum: ["user", "merchant"],
+      default: "user",
     },
   },
   {

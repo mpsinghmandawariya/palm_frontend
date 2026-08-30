@@ -1,186 +1,183 @@
+const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const PalmProfile = require("../models/PalmProfile");
 const Transaction = require("../models/Transaction");
-const FraudAlert = require("../models/FraudAlert");
-const AuditLog = require("../models/AuditLog");
-const bcrypt = require("bcryptjs");
-const { evaluateTransactionRisk } = require("../services/riskEngine");
+const VerificationAttempt = require("../models/VerificationAttempt");
+const mlService = require("../services/mlService");
+const walletService = require("../services/walletService");
+const AppError = require("../utils/AppError");
+const asyncHandler = require("../utils/asyncHandler");
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || "http://127.0.0.1:8000";
+const MATCH_THRESHOLD = Number(process.env.MATCH_THRESHOLD_VERIFY) || 0.65;
 
-function base64ToBlob(base64Data) {
-  const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-  let mimeType = "image/jpeg";
-  let buffer;
+const lookupPhone = asyncHandler(async (req, res) => {
+  const { phone } = req.params;
+  const cleanPhone = (phone || "").replace(/\D/g, "");
 
-  if (matches && matches.length === 3) {
-    mimeType = matches[1];
-    buffer = Buffer.from(matches[2], "base64");
-  } else {
-    buffer = Buffer.from(base64Data.replace(/^data:image\/\w+;base64,/, ""), "base64");
+  if (cleanPhone.length !== 10) {
+    throw new AppError("Invalid mobile number format", 400, "VALIDATION_ERROR");
   }
-  return new Blob([buffer], { type: mimeType });
-}
 
-const generateTransactionId = () => {
-  return "EP-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000);
-};
+  const user = await User.findOne({ phone: cleanPhone });
+  if (!user) {
+    return res.status(200).json({
+      success: false,
+      message: "No user found with this mobile number",
+    });
+  }
 
-const payWithPalm = async (req, res) => {
-  try {
-    const { amount, image, pin, recipientName, recipientPhone, category } = req.body;
+  res.status(200).json({
+    success: true,
+    user: {
+      id: user._id,
+      name: user.name,
+      phone: user.phone,
+      palmRegistered: user.palmRegistered,
+    },
+  });
+});
 
-    const paymentAmount = Number(amount);
-    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a valid payment amount",
+const pay = asyncHandler(async (req, res) => {
+  const { amount, recipientName, recipientPhone, image, pin } = req.body;
+  const requestId = req.requestId;
+  const numAmount = Number(amount);
+
+  // 1. Ensure at least one authentication factor is present
+  if (!image && !pin) {
+    throw new AppError("Either a palm scan image or security PIN is required", 400, "VALIDATION_ERROR");
+  }
+
+  // 2. Fetch User secrets
+  const user = await User.findById(req.userId).select("+pin");
+  if (!user) {
+    throw new AppError("User account not found", 404, "USER_NOT_FOUND");
+  }
+
+  // 3. Evaluate PIN if provided
+  let isPinVerified = false;
+  if (pin) {
+    const isMatch = await bcrypt.compare(String(pin), user.pin);
+    if (!isMatch) {
+      await VerificationAttempt.create({
+        userId: req.userId,
+        context: "VERIFY_1_1",
+        outcome: "NO_MATCH",
       });
+      throw new AppError("Incorrect security PIN. Please try again.", 401, "INCORRECT_PIN");
     }
+    isPinVerified = true;
+  }
 
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+  // 4. Evaluate Palm Biometrics if image provided
+  let mlVerified = false;
+  let matchScore = null;
 
-    // PIN FALLBACK OPTION IF PROVIDED
-    let isPinVerified = false;
-    if (pin && pin.length === 4) {
-      isPinVerified = await bcrypt.compare(pin, user.pin);
-      if (!isPinVerified) {
-        return res.status(401).json({
-          success: false,
-          message: "Incorrect 4-digit PIN",
+  if (image && !isPinVerified) {
+    const palmProfile = await PalmProfile.findOne({ userId: req.userId });
+
+    if (palmProfile && palmProfile.embedding && palmProfile.embedding.length === 1280) {
+      try {
+        const mlResult = await mlService.verify(image, palmProfile.embedding, requestId);
+        matchScore = Math.round((mlResult.score || 0) * 100);
+
+        if (mlResult.score >= MATCH_THRESHOLD) {
+          mlVerified = true;
+        }
+      } catch (err) {
+        // If ML is down, log error attempt and let it fall through to PIN_CHALLENGE
+        await VerificationAttempt.create({
+          userId: req.userId,
+          context: "VERIFY_1_1",
+          outcome: "ERROR",
         });
-      }
-    }
 
-    let mlData = { similarity: 0, quality_score: 0.9, liveness_score: 0.95, verified: false };
-
-    if (image) {
-      const palmProfile = await PalmProfile.findOne({ userId: req.userId });
-      if (palmProfile && palmProfile.embedding && palmProfile.embedding.length > 0) {
-        const blob = base64ToBlob(image);
-        const formData = new FormData();
-        formData.append("file", blob, "verify_palm.jpg");
-        formData.append("target_embedding", JSON.stringify(palmProfile.embedding));
-
-        try {
-          const mlResponse = await fetch(`${ML_SERVICE_URL}/verify`, {
-            method: "POST",
-            body: formData,
-          });
-          if (mlResponse.ok) {
-            mlData = await mlResponse.json();
-          }
-        } catch (err) {
-          console.error("ML Service Warning:", err.message);
+        // If no PIN was supplied, bubble up the ML service unavailable error
+        if (!pin) {
+          throw err;
         }
       }
     }
+  }
 
-    // EYES & RISK ENGINE EVALUATION
-    const riskResult = evaluateTransactionRisk({
-      amount: paymentAmount,
-      similarity: mlData.similarity,
-      qualityScore: mlData.quality_score || 0.9,
-      livenessScore: mlData.liveness_score || 0.95,
-      failedAttempts: mlData.verified ? 0 : 1,
+  // 5. Verification Gate: If neither factor cleared, trigger PIN Challenge
+  if (!mlVerified && !isPinVerified) {
+    await VerificationAttempt.create({
+      userId: req.userId,
+      context: "VERIFY_1_1",
+      outcome: "NO_MATCH",
+      score: matchScore ? matchScore / 100 : null,
     });
+    throw new AppError("Biometric verification failed. Please enter your 4-digit PIN.", 401, "PIN_CHALLENGE");
+  }
 
-    // HIGH RISK BLOCK
-    if (riskResult.action === "BLOCK" && !isPinVerified) {
-      await FraudAlert.create({
-        userId: user._id,
-        riskScore: riskResult.riskScore,
-        riskLevel: riskResult.riskLevel,
-        reason: "Suspicious biometric & high-risk payment parameters",
-        actionTaken: "BLOCK",
-      });
+  // 6. Check for Recipient by Mobile Number (P2P Transfer)
+  const cleanPhone = (recipientPhone || recipientName || "").replace(/\D/g, "");
+  let recipientUser = null;
+  if (cleanPhone.length === 10) {
+    recipientUser = await User.findOne({ phone: cleanPhone });
+  }
 
-      return res.status(403).json({
-        success: false,
-        action: "BLOCK",
-        riskScore: riskResult.riskScore,
-        message: "Security Alert: High risk score detected. Payment blocked.",
-      });
-    }
+  // 7. Atomic Balance Check and Deduction (Zero Race Window)
+  const newBalance = await walletService.debit(req.userId, numAmount);
 
-    // MEDIUM RISK CHALLENGE (Require PIN Fallback if not verified by high similarity)
-    if (!mlData.verified && !isPinVerified) {
-      return res.status(401).json({
-        success: false,
-        action: "PIN_CHALLENGE",
-        riskScore: riskResult.riskScore,
-        similarity: mlData.similarity,
-        message: "Palm biometric scan unverified. Enter your 4-digit PIN to complete authorization.",
-      });
-    }
+  // 8. If recipient is an enrolled user, credit their balance atomically
+  let txType = "PALM_PAYMENT";
+  let targetName = (recipientName || "Recipient").trim();
 
-    // CHECK BALANCE
-    const currentBalance = Number(user.walletBalance) || 0;
-    if (currentBalance < paymentAmount) {
-      return res.status(400).json({
-        success: false,
-        message: "Insufficient wallet balance",
-        balance: currentBalance,
-      });
-    }
+  if (recipientUser) {
+    txType = "TRANSFER";
+    targetName = `${recipientUser.name} (${recipientUser.phone})`;
+    await walletService.credit(recipientUser._id, numAmount);
 
-    // DEDUCT & SAVE
-    user.walletBalance = currentBalance - paymentAmount;
-    await user.save();
-
-    const targetRecipient = recipientName || "Nayantara V";
-    const targetPhone = recipientPhone || "+91 8050530XXX";
-    const targetCategory = category || "Transfer";
-
-    const transaction = await Transaction.create({
-      userId: user._id,
-      amount: paymentAmount,
-      type: "PALM_PAYMENT",
-      recipientName: targetRecipient,
-      recipientPhone: targetPhone,
-      category: targetCategory,
-      status: "COMPLETED",
-      transactionId: generateTransactionId(),
-    });
-
-    await AuditLog.create({
-      userId: user._id,
-      action: "PALM_PAYMENT_SUCCESS",
-      details: `Paid ₹${paymentAmount} to ${targetRecipient} (Risk Score: ${riskResult.riskScore})`,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: isPinVerified ? "Payment authorized via Security PIN" : "Payment authorized via Palm Biometrics",
-      payment: {
-        amount: paymentAmount,
-        recipientName: transaction.recipientName,
-        recipientPhone: transaction.recipientPhone,
-        remainingBalance: user.walletBalance,
-        transactionId: transaction.transactionId,
-        status: transaction.status,
-        date: transaction.createdAt,
-        similarity: mlData.similarity,
-        riskScore: riskResult.riskScore,
-        authMethod: isPinVerified ? "PIN" : "PALM",
-      },
-    });
-
-  } catch (error) {
-    console.error("PALM PAYMENT ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: "Payment processing failed: " + (error.message || "Server error"),
+    // Record incoming credit transaction for recipient
+    await Transaction.create({
+      payerId: recipientUser._id,
+      recipientUserId: req.userId,
+      recipientName: `Received from ${user.name} (${user.phone})`,
+      recipientPhone: user.phone,
+      amount: numAmount,
+      type: "RECEIVED",
+      status: "SUCCESS",
+      authMethod: null,
     });
   }
-};
+
+  // 9. Record Outgoing Transaction
+  const transaction = await Transaction.create({
+    payerId: req.userId,
+    recipientUserId: recipientUser ? recipientUser._id : null,
+    recipientName: targetName,
+    recipientPhone: cleanPhone.length === 10 ? cleanPhone : null,
+    amount: numAmount,
+    type: txType,
+    status: "SUCCESS",
+    authMethod: mlVerified ? "PALM" : "PIN",
+    matchScore: mlVerified ? matchScore : null,
+  });
+
+  // 10. Record Successful Audit Log
+  await VerificationAttempt.create({
+    userId: req.userId,
+    context: "VERIFY_1_1",
+    outcome: "SUCCESS",
+    score: matchScore ? matchScore / 100 : 1.0,
+  });
+
+  res.status(200).json({
+    success: true,
+    payment: {
+      transactionId: transaction.transactionId || transaction._id,
+      amount: numAmount,
+      recipientName: transaction.recipientName,
+      matchScore: transaction.matchScore,
+      authMethod: transaction.authMethod,
+      newBalance,
+      createdAt: transaction.createdAt,
+    },
+  });
+});
 
 module.exports = {
-  payWithPalm,
+  pay,
+  lookupPhone,
 };

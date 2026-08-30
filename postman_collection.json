@@ -1,0 +1,275 @@
+{
+  "info": {
+    "name": "Palm Pay API (v2)",
+    "_postman_id": "c1f7289b-7312-40e1-88dc-8e6d97c5e219",
+    "description": "Enterprise Contactless Biometric Palm Payment & Identification System API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "System Health Probe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Samantha Patel\",\n  \"email\": \"samantha@palmpay.internal\",\n  \"phone\": \"9876543210\",\n  \"password\": \"Password123\",\n  \"pin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"samantha@palmpay.internal\",\n  \"password\": \"Password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Biometrics (Palm)",
+      "item": [
+        {
+          "name": "Record Biometric Consent",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/palm/consent",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "palm", "consent"]
+            }
+          }
+        },
+        {
+          "name": "Enroll Palm Template",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"image\": \"data:image/jpeg;base64,...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/palm/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "palm", "register"]
+            }
+          }
+        },
+        {
+          "name": "Get Palm Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/palm/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "palm", "status"]
+            }
+          }
+        },
+        {
+          "name": "Delete Palm Data (Right to Erasure)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/palm",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "palm"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments & Wallet",
+      "item": [
+        {
+          "name": "Pay with Palm / PIN",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 250,\n  \"recipientName\": \"Starbucks Coffee\",\n  \"image\": \"data:image/jpeg;base64,...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payment/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payment", "pay"]
+            }
+          }
+        },
+        {
+          "name": "Get Wallet Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wallet"]
+            }
+          }
+        },
+        {
+          "name": "Top Up Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wallet/topup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wallet", "topup"]
+            }
+          }
+        },
+        {
+          "name": "List Transactions (Paginated)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "transactions"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Merchant POS",
+      "item": [
+        {
+          "name": "Create POS Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 150\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pos/session",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pos", "session"]
+            }
+          }
+        },
+        {
+          "name": "1:N Identify Palm at POS",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"<SESSION_ID>\",\n  \"image\": \"data:image/jpeg;base64,...\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pos/identify",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pos", "identify"]
+            }
+          }
+        },
+        {
+          "name": "Authorize POS Settlement",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"<SESSION_ID>\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pos/authorize",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "pos", "authorize"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000" },
+    { "key": "token", "value": "" }
+  ]
+}

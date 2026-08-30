@@ -1,55 +1,31 @@
-# Palm Pay ML Prototype
+# Palm Pay — Machine Learning Biometric Service
 
-Standalone prototype for palm capture, hand localization, embeddings, and similarity matching.
+FastAPI Python microservice running MediaPipe Hands for palm landmark detection and MobileNetV2 for 1280-dimensional biometric embedding extraction.
 
-## Pipeline
-Camera/images -> MediaPipe hand localization -> normalized hand crop -> MobileNetV2 embedding -> cosine similarity -> best match.
+## 🚀 Quick Start
 
-This is a research/demo prototype, not production biometric authentication. Do not use its match result as the sole authorization mechanism for real financial transactions.
-
-## Recommended Python
-Python 3.10 or 3.11.
-
-## Install
+### 1. Install Dependencies
 ```bash
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
-If `capture.py` fails with `module 'mediapipe' has no attribute 'solutions'`,
-reinstall the pinned dependencies:
-
+### 2. Run Service
 ```bash
-python -m pip install --force-reinstall -r requirements.txt
+uvicorn app:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-## Run
-1. Capture enrolled images:
+### 3. Interactive API Docs
+Visit [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) for auto-generated Swagger OpenAPI documentation.
+
+### 4. Run Unit Tests
 ```bash
-python capture.py
-```
-Enter a username and capture about 30-50 images. Repeat for every person.
-
-2. Build the embedding database:
-```bash
-python register.py
+pytest
 ```
 
-3. Run live recognition:
-```bash
-python recognize.py
-```
-Press Q to quit.
-
-## Dataset layout
-```text
-dataset/
-  mahipal/
-    0000.jpg
-    0001.jpg
-  user2/
-    0000.jpg
-    0001.jpg
-```
-
-The first TensorFlow model initialization may download MobileNetV2 ImageNet weights.
+## 🧠 Biometric Engine
+- **Palm ROI Extraction**: MediaPipe hand landmark tracking detects bounding box and orientation. Multi-hand frames are rejected with `422`.
+- **Feature Embedding**: MobileNetV2 extracts normalized 1280-d feature vectors.
+- **Matching Modes**:
+  - `POST /verify`: 1:1 Cosine similarity ($\ge 0.65$).
+  - `POST /identify`: 1:N Linear scan ($\ge 0.78$) across candidate embeddings.
+- **Quality & Liveness**: Laplacian variance sharpness calculation and FFT high-frequency presentation attack detection.

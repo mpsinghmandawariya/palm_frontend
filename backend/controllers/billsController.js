@@ -1,22 +1,25 @@
 const Biller = require("../models/Biller");
 const User = require("../models/User");
 const Transaction = require("../models/Transaction");
+const AuditLog = require("../models/AuditLog");
 
 const getBillers = async (req, res) => {
   try {
-    const billers = await Biller.find().lean();
-    if (billers.length === 0) {
+    let billers = await Biller.find().lean();
+    if (!billers || billers.length === 0) {
       // Seed default billers
       const seedBillers = [
-        { billerId: "MOB-AIRTEL", name: "Airtel Prepaid/Postpaid", category: "Mobile", icon: "📱" },
-        { billerId: "ELEC-BESCOM", name: "BESCOM Electricity", category: "Electricity", icon: "⚡" },
-        { billerId: "WATER-BWSSB", name: "BWSSB Water Board", category: "Water", icon: "💧" },
-        { billerId: "DTH-TATA", name: "Tata Play DTH", category: "DTH", icon: "📺" },
-        { billerId: "BB-ACT", name: "ACT Fibernet Broadband", category: "Broadband", icon: "🌐" },
-        { billerId: "FAST-ICICI", name: "ICICI FASTag Recharge", category: "FASTag", icon: "🚗" },
+        { billerId: "MOB-AIRTEL", name: "Airtel Prepaid & Postpaid", category: "Mobile", icon: "Smartphone" },
+        { billerId: "MOB-JIO", name: "Jio Infocomm Telecom", category: "Mobile", icon: "Smartphone" },
+        { billerId: "ELEC-BESCOM", name: "BESCOM Bangalore Electricity", category: "Electricity", icon: "Zap" },
+        { billerId: "ELEC-TATA", name: "Tata Power Distribution", category: "Electricity", icon: "Zap" },
+        { billerId: "WATER-BWSSB", name: "BWSSB Metropolitan Water Supply", category: "Water", icon: "Droplets" },
+        { billerId: "DTH-TATA", name: "Tata Play DTH Network", category: "DTH", icon: "Tv" },
+        { billerId: "BB-ACT", name: "ACT Fibernet Broadband", category: "Broadband", icon: "Wifi" },
+        { billerId: "FAST-ICICI", name: "ICICI FASTag Highway Recharge", category: "FASTag", icon: "Car" },
       ];
       await Biller.insertMany(seedBillers);
-      return res.json({ success: true, billers: seedBillers });
+      billers = await Biller.find().lean();
     }
     res.json({ success: true, billers });
   } catch (error) {
@@ -30,12 +33,19 @@ const payBill = async (req, res) => {
     const billAmount = Number(amount);
 
     if (!billAmount || billAmount <= 0) {
-      return res.status(400).json({ success: false, message: "Invalid bill amount" });
+      return res.status(400).json({ success: false, message: "Please enter a valid bill payment amount" });
     }
 
     const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User account not found" });
+    }
+
     if (user.walletBalance < billAmount) {
-      return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient wallet balance (Available: ₹${user.walletBalance.toLocaleString("en-IN")})`,
+      });
     }
 
     user.walletBalance -= billAmount;
@@ -46,15 +56,21 @@ const payBill = async (req, res) => {
       amount: billAmount,
       type: "BILL_PAYMENT",
       recipientName: billerId || "Utility Biller",
-      recipientPhone: consumerNumber || "1009283741",
-      category: category || "Bills",
+      recipientPhone: consumerNumber || "Consumer A/C",
+      category: category || "Bills & Utilities",
       status: "COMPLETED",
-      transactionId: "EP-BILL-" + Date.now(),
+      transactionId: "PALM-BILL-" + Date.now() + "-" + Math.floor(1000 + Math.random() * 9000),
+    });
+
+    await AuditLog.create({
+      userId: user._id,
+      action: "BILL_PAYMENT_SUCCESS",
+      details: `Paid ₹${billAmount} for ${category || "Utility Bill"} (${billerId})`,
     });
 
     res.json({
       success: true,
-      message: `Successfully paid ₹${billAmount} for ${category || "Utility Bill"}`,
+      message: `Successfully paid ₹${billAmount.toLocaleString("en-IN")} for ${category || "Utility Bill"}`,
       walletBalance: user.walletBalance,
       transaction,
     });
@@ -64,3 +80,4 @@ const payBill = async (req, res) => {
 };
 
 module.exports = { getBillers, payBill };
+

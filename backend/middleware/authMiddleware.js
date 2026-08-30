@@ -1,39 +1,32 @@
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const AppError = require("../utils/AppError");
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return next(new AppError("Authentication token is missing or malformed", 401, "UNAUTHORIZED"));
+  }
+
+  const token = authHeader.split(" ")[1];
+
   try {
-    const authHeader = req.headers.authorization;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "palm_pay_super_secret_2026");
+    const user = await User.findById(decoded.id);
 
-    if (!authHeader) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
+    if (!user) {
+      return next(new AppError("The user belonging to this token no longer exists", 401, "USER_NOT_FOUND"));
     }
 
-    const token = authHeader.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token",
-      });
-    }
-
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    req.userId = decoded.userId;
-
+    req.userId = user._id;
+    req.user = user;
     next();
-
   } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid or expired token",
-    });
+    if (error.name === "TokenExpiredError") {
+      return next(new AppError("Your session has expired. Please sign in again.", 401, "TOKEN_EXPIRED"));
+    }
+    return next(new AppError("Invalid authentication token", 401, "INVALID_TOKEN"));
   }
 };
 

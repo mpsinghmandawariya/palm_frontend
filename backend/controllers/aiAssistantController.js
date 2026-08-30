@@ -65,7 +65,7 @@ const processAiQuery = async (req, res) => {
 
     return res.json({
       success: true,
-      answer: "I am your EasyPay AI Financial Assistant. Ask me about your monthly spending, largest transactions, or upcoming AutoPay bills!",
+      answer: "I am your Palm Pay AI Financial Assistant. Ask me about your monthly spending, largest transactions, or upcoming AutoPay bills!",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -73,3 +73,4 @@ const processAiQuery = async (req, res) => {
 };
 
 module.exports = { processAiQuery };
+

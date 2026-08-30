@@ -1,144 +1,123 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { ThemeProvider } from "./context/ThemeContext.jsx";
+import { ToastProvider } from "./context/ToastContext.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
-import Dashboard from "./pages/Dashboard.jsx";
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import PalmRegister from "./pages/PalmRegister.jsx";
-import ReceiveMoney from "./pages/ReceiveMoney.jsx";
-import PayWithPalm from "./pages/PayWithPalm.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
+import PayAmount from "./pages/PayAmount.jsx";
+import PayScan from "./pages/PayScan.jsx";
 import Transactions from "./pages/Transactions.jsx";
 import Profile from "./pages/Profile.jsx";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
+import TermsOfService from "./pages/TermsOfService.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
 
-// Enterprise Fintech Suite Pages
-import BillsPage from "./pages/BillsPage.jsx";
-import AutoPayPage from "./pages/AutoPayPage.jsx";
-import SavingsRewardsPage from "./pages/SavingsRewardsPage.jsx";
-import SecurityPage from "./pages/SecurityPage.jsx";
-import MerchantPage from "./pages/MerchantPage.jsx";
-import AdminPage from "./pages/AdminPage.jsx";
-import AiAssistantWidget from "./components/AiAssistantWidget.jsx";
+// Phase 2 Merchant POS Pages
+import POSHome from "./pages/POSHome.jsx";
+import POSScan from "./pages/POSScan.jsx";
+import POSReceipt from "./pages/POSReceipt.jsx";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+    <ThemeProvider>
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* PUBLIC AUTH ROUTES */}
+            <Route path="/" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
 
-        {/* PROTECTED SUITE ROUTES */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/receive-money"
-          element={
-            <ProtectedRoute>
-              <ReceiveMoney />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Profile />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/transactions"
-          element={
-            <ProtectedRoute>
-              <Transactions />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/pay-with-palm"
-          element={
-            <ProtectedRoute>
-              <PayWithPalm />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/palm-register"
-          element={
-            <ProtectedRoute>
-              <PalmRegister />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
+            {/* PHASE 1: CUSTOMER WEB APP ROUTES */}
+            <Route
+              path="/palm-register"
+              element={
+                <ProtectedRoute>
+                  <PalmRegister />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pay"
+              element={
+                <ProtectedRoute>
+                  <PayAmount />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pay/scan"
+              element={
+                <ProtectedRoute>
+                  <PayScan />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pay-with-palm"
+              element={
+                <ProtectedRoute>
+                  <PayAmount />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/transactions"
+              element={
+                <ProtectedRoute>
+                  <Transactions />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
 
-        {/* ENTERPRISE MODULES */}
-        <Route
-          path="/bills"
-          element={
-            <ProtectedRoute>
-              <BillsPage />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/autopay"
-          element={
-            <ProtectedRoute>
-              <AutoPayPage />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/savings-rewards"
-          element={
-            <ProtectedRoute>
-              <SavingsRewardsPage />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/security"
-          element={
-            <ProtectedRoute>
-              <SecurityPage />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/merchant"
-          element={
-            <ProtectedRoute>
-              <MerchantPage />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin"
-          element={
-            <ProtectedRoute>
-              <AdminPage />
-              <AiAssistantWidget />
-            </ProtectedRoute>
-          }
-        />
+            {/* PHASE 2: MERCHANT POS WEB APP ROUTES */}
+            <Route
+              path="/pos"
+              element={
+                <ProtectedRoute>
+                  <POSHome />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pos/scan"
+              element={
+                <ProtectedRoute>
+                  <POSScan />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pos/receipt"
+              element={
+                <ProtectedRoute>
+                  <POSReceipt />
+                </ProtectedRoute>
+              }
+            />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

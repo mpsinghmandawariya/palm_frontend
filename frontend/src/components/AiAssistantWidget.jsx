@@ -1,16 +1,31 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { Bot, Send, X, Sparkles, ShieldAlert } from "lucide-react";
 import API from "../services/api";
 
 export default function AiAssistantWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState([
-    { sender: "ai", text: "👋 Hi! I'm your EasyPay AI Financial Assistant. Ask me about your spending, largest expenses, or AutoPay bills!" },
+    {
+      sender: "ai",
+      text: "👋 Hi! I'm your Palm Pay AI Financial Intelligence Assistant. Ask me about your spending breakdown, highest expenses, or upcoming AutoPay mandates!",
+    },
   ]);
   const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      scrollToBottom();
+    }
+  }, [messages, isOpen]);
 
   const handleSend = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!query.trim()) return;
 
     const userMsg = query.trim();
@@ -22,7 +37,7 @@ export default function AiAssistantWidget() {
       const response = await API.post("/ai/assistant/query", { query: userMsg });
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", text: response.data?.answer || "I parsed your financial data." },
+        { sender: "ai", text: response.data?.answer || "I parsed your financial ledger." },
       ]);
     } catch {
       setMessages((prev) => [
@@ -34,98 +49,89 @@ export default function AiAssistantWidget() {
     }
   };
 
+  const quickPrompts = [
+    "What did I spend this month?",
+    "Show my highest expense",
+    "Any AutoPay bills scheduled?",
+  ];
+
   return (
     <>
       {/* FLOATING AI ASSISTANT TRIGGER BUTTON */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        style={{
-          position: "fixed",
-          bottom: "85px",
-          right: "20px",
-          width: "52px",
-          height: "52px",
-          borderRadius: "50%",
-          background: "linear-gradient(135deg, #111111 0%, #374151 100%)",
-          color: "#ffffff",
-          fontSize: "24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-          zIndex: 90,
-          border: "2px solid #ffffff",
-        }}
-        title="AI Assistant"
+        className="ai-floating-trigger"
+        title="AI Financial Assistant"
+        aria-label="Open AI Financial Assistant"
       >
-        🤖
+        <Bot size={24} />
       </button>
 
       {/* CHAT DRAWER MODAL */}
       {isOpen && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "150px",
-            right: "20px",
-            width: "min(360px, calc(100vw - 40px))",
-            height: "440px",
-            background: "#ffffff",
-            borderRadius: "24px",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-            border: "1.5px solid #ece7df",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            zIndex: 100,
-          }}
-        >
+        <div className="ai-chat-drawer" role="dialog" aria-modal="true" aria-label="AI Financial Assistant Chat">
           {/* HEADER */}
-          <div style={{ background: "#111111", color: "white", padding: "14px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "20px" }}>🤖</span>
+          <div className="ai-chat-header">
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div className="ai-header-badge">
+                <Bot size={18} />
+              </div>
               <div>
-                <strong style={{ fontSize: "14px", display: "block" }}>EasyPay AI Assistant</strong>
-                <span style={{ fontSize: "10px", opacity: 0.7 }}>Financial Intelligence</span>
+                <strong style={{ fontSize: "14px", display: "block" }}>Palm Pay AI Assistant</strong>
+                <span style={{ fontSize: "11px", opacity: 0.8, display: "flex", alignItems: "center", gap: "4px" }}>
+                  <Sparkles size={11} /> Real-time Financial NLP
+                </span>
               </div>
             </div>
-            <button onClick={() => setIsOpen(false)} style={{ background: "none", color: "white", fontSize: "20px", padding: 0 }}>×</button>
+            <button className="btn-icon" onClick={() => setIsOpen(false)} aria-label="Close chat" style={{ color: "white" }}>
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* QUICK PROMPT CHIPS */}
+          <div className="ai-quick-prompts-bar">
+            {quickPrompts.map((p) => (
+              <button
+                key={p}
+                className="ai-chip-btn"
+                onClick={() => {
+                  setQuery(p);
+                }}
+              >
+                {p}
+              </button>
+            ))}
           </div>
 
           {/* MESSAGES CONTAINER */}
-          <div style={{ flex: 1, padding: "14px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px", background: "#f8f6f2" }}>
+          <div className="ai-messages-container">
             {messages.map((m, idx) => (
-              <div
-                key={idx}
-                style={{
-                  alignSelf: m.sender === "user" ? "flex-end" : "flex-start",
-                  background: m.sender === "user" ? "#111111" : "#ffffff",
-                  color: m.sender === "user" ? "#ffffff" : "#111111",
-                  padding: "10px 14px",
-                  borderRadius: "16px",
-                  fontSize: "13px",
-                  maxWidth: "85%",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
-                  lineHeight: "1.4",
-                }}
-              >
+              <div key={idx} className={`ai-message-bubble ${m.sender === "user" ? "user" : "assistant"}`}>
                 {m.text}
               </div>
             ))}
-            {loading && <div style={{ fontSize: "12px", color: "#767676", fontStyle: "italic" }}>AI is analyzing ledger...</div>}
+            {loading && (
+              <div className="ai-typing-indicator">
+                <div className="ai-dot" />
+                <div className="ai-dot" />
+                <div className="ai-dot" />
+                <span>AI analyzing ledger...</span>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* INPUT FORM */}
-          <form onSubmit={handleSend} style={{ display: "flex", padding: "10px", background: "white", borderTop: "1px solid #ece7df" }}>
+          <form onSubmit={handleSend} className="ai-input-form">
             <input
               type="text"
-              placeholder="Ask e.g. What did I spend?"
+              placeholder="Ask e.g. What did I spend on bills?"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              style={{ fontSize: "13px", padding: "10px 12px", borderRadius: "12px 0 0 12px", borderRight: "none" }}
+              className="ai-text-input"
             />
-            <button type="submit" className="btn-black" style={{ width: "auto", borderRadius: "0 12px 12px 0", padding: "10px 16px", fontSize: "13px" }}>
-              Send
+            <button type="submit" className="ai-send-btn" disabled={!query.trim() || loading} aria-label="Send message">
+              <Send size={15} />
             </button>
           </form>
         </div>

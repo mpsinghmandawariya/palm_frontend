@@ -1,270 +1,104 @@
-const User = require("../models/User");
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const User = require("../models/User");
+const AppError = require("../utils/AppError");
+const asyncHandler = require("../utils/asyncHandler");
 
-
-// ==============================
-// REGISTER
-// ==============================
-const register = async (req, res) => {
-  try {
-    const {
-      name,
-      email,
-      mobile,
-      dob,
-      gender,
-      aadhaarTestId,
-      password,
-      confirmPassword,
-      pin,
-      initialBalance,
-    } = req.body;
-
-
-    // Required fields
-    if (
-      !name ||
-      !email ||
-      !mobile ||
-      !dob ||
-      !aadhaarTestId ||
-      !password ||
-      !confirmPassword ||
-      !pin
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Please fill all required fields",
-      });
-    }
-
-
-    // Password validation
-    if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Passwords do not match",
-      });
-    }
-
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least 6 characters",
-      });
-    }
-
-
-    // PIN validation
-    if (!/^\d{4}$/.test(pin)) {
-      return res.status(400).json({
-        success: false,
-        message: "PIN must be exactly 4 digits",
-      });
-    }
-
-
-    // Mobile validation
-    if (!/^[0-9]{10}$/.test(mobile)) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a valid 10-digit mobile number",
-      });
-    }
-
-
-    // Email validation
-    const emailRegex =
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Enter a valid email address",
-      });
-    }
-
-
-    // Check existing user
-    const existingUser = await User.findOne({
-      $or: [{ email }, { mobile }],
-    });
-
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "Email or mobile number already registered",
-      });
-    }
-
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Hash PIN
-    const hashedPin = await bcrypt.hash(pin, 10);
-
-
-    // Wallet balance
-    let balance = 5000;
-
-    if (
-      initialBalance !== undefined &&
-      initialBalance !== null &&
-      initialBalance !== ""
-    ) {
-      balance = Number(initialBalance);
-
-      if (isNaN(balance) || balance < 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid initial balance",
-        });
-      }
-    }
-
-
-    // Create user
-    const user = await User.create({
-      name,
-      email,
-      mobile,
-      dob,
-      gender,
-      aadhaarTestId,
-      password: hashedPassword,
-      pin: hashedPin,
-      walletBalance: balance,
-    });
-
-
-    // Generate JWT
-    const token = jwt.sign(
-      {
-        userId: user._id,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
-
-    res.status(201).json({
-      success: true,
-      message: "Account created successfully",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-        walletBalance: user.walletBalance,
-        palmRegistered: user.palmRegistered,
-      },
-    });
-
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET || "palm_pay_super_secret_2026", {
+    expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  });
 };
 
+const register = asyncHandler(async (req, res) => {
+  const { name, email, password } = req.body;
+  const rawPhone = req.body.phone || req.body.mobile || "";
+  const rawPin = req.body.pin || "1234";
 
+  const normalizedEmail = email.toLowerCase().trim();
+  const normalizedPhone = rawPhone.trim();
 
-// ==============================
-// LOGIN
-// ==============================
-const login = async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
+  const existingUser = await User.findOne({
+    $or: [{ email: normalizedEmail }, { phone: normalizedPhone }],
+  });
 
-
-    if (!identifier || !password) {
-      return res.status(400).json({
-        success: false,
-        message: "Email/mobile and password are required",
-      });
+  if (existingUser) {
+    if (existingUser.email === normalizedEmail) {
+      throw new AppError("An account with this email already exists", 409, "EMAIL_ALREADY_EXISTS");
     }
-
-
-    // Find using email OR mobile
-    const user = await User.findOne({
-      $or: [
-        { email: identifier.toLowerCase() },
-        { mobile: identifier },
-      ],
-    });
-
-
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid login credentials",
-      });
-    }
-
-
-    // Compare password
-    const passwordMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
-
-
-    if (!passwordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid login credentials",
-      });
-    }
-
-
-    // JWT
-    const token = jwt.sign(
-      {
-        userId: user._id,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
-
-
-    res.json({
-      success: true,
-      message: "Login successful",
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        mobile: user.mobile,
-        walletBalance: user.walletBalance,
-        palmRegistered: user.palmRegistered,
-      },
-    });
-
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
+    throw new AppError("An account with this phone number already exists", 409, "PHONE_ALREADY_EXISTS");
   }
-};
 
+  const salt = await bcrypt.genSalt(10);
+  const passwordHash = await bcrypt.hash(password, salt);
+  const pinHash = await bcrypt.hash(String(rawPin), salt);
 
+  const user = await User.create({
+    name: name.trim(),
+    email: normalizedEmail,
+    phone: normalizedPhone,
+    passwordHash,
+    pin: pinHash,
+    walletBalance: 5000, // Demo starting balance
+    palmRegistered: false,
+    role: "user",
+  });
+
+  const token = generateToken(user._id);
+
+  res.status(201).json({
+    success: true,
+    token,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      walletBalance: user.walletBalance,
+      palmRegistered: user.palmRegistered,
+      role: user.role,
+    },
+  });
+});
+
+const login = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+  const rawId = (req.body.identifier || req.body.email || req.body.phone || req.body.mobile || "").trim();
+
+  if (!rawId) {
+    throw new AppError("Email or mobile number is required", 400, "VALIDATION_ERROR");
+  }
+
+  const normalizedEmail = rawId.toLowerCase();
+  const user = await User.findOne({
+    $or: [{ email: normalizedEmail }, { phone: rawId }],
+  }).select("+passwordHash");
+
+  if (!user) {
+    throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
+  }
+
+  const isPasswordMatch = await bcrypt.compare(password, user.passwordHash);
+  if (!isPasswordMatch) {
+    throw new AppError("Invalid email or password", 401, "INVALID_CREDENTIALS");
+  }
+
+  const token = generateToken(user._id);
+
+  res.status(200).json({
+    success: true,
+    token,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      walletBalance: user.walletBalance,
+      palmRegistered: user.palmRegistered,
+      role: user.role,
+    },
+  });
+});
 
 module.exports = {
   register,
